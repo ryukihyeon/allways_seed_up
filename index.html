@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>allway's - 전동휠체어 안전 지도</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <style>
+      body, html, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+      /* Custom Marker Styles */
+      .custom-div-icon {
+        background: transparent;
+        border: none;
+      }
+      
+      /* User Location Marker */
+      .user-location-pulse {
+        width: 20px;
+        height: 20px;
+        background-color: #3b82f6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        position: relative;
+      }
+      .user-location-pulse::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background-color: rgba(59, 130, 246, 0.5);
+        animation: pulse 2s infinite;
+      }
+      
+      /* Station Marker Animations */
+      .station-marker-available {
+        animation: station-pulse 3s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+        100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+      }
+      
+      @keyframes station-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+      
+      /* Route Line Animation */
+      .route-line {
+        animation: route-dash 2s linear infinite;
+      }
+      
+      @keyframes route-dash {
+        0% { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: 20; }
+      }
+      
+      /* Popup Improvements */
+      .leaflet-popup-content-wrapper {
+        border-radius: 12px !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
+      }
+      
+      .leaflet-popup-tip {
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "leaflet/": "https://aistudiocdn.com/leaflet@^1.9.4/",
+    "leaflet": "https://aistudiocdn.com/leaflet@^1.9.4",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

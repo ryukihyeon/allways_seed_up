@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카카오 API 테스트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ 카카오 API 테스트</h1>
+    
+    <div class="test-section">
+        <h2>1. 카카오 모빌리티 길찾기 API 테스트</h2>
+        <p>서울시청 → 강남역</p>
+        <button onclick="testNaviAPI()">테스트 실행</button>
+        <div id="navi-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 카카오 장소 검색 API 테스트</h2>
+        <input type="text" id="search-query" placeholder="검색어 입력 (예: 강남역)" style="padding: 8px; width: 300px;">
+        <button onclick="testSearchAPI()">검색</button>
+        <div id="search-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 역지오코딩 API 테스트</h2>
+        <p>서울시청 좌표 → 주소</p>
+        <button onclick="testGeocodeAPI()">테스트 실행</button>
+        <div id="geocode-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_KEY = 'e9fc22f8f9697e09d27a53e3111146dd';
+
+        async function testNaviAPI() {
+            const resultDiv = document.getElementById('navi-result');
+            resultDiv.textContent = '테스트 중...';
+            resultDiv.className = 'result';
+
+            try {
+                // 서울시청 → 강남역
+                const origin = '126.9780,37.5665';
+                const destination = '127.0276,37.4979';
+                
+                const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${origin}&destination=${destination}&priority=RECOMMEND`;
+                
+                console.log('요청 URL:', url);
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `KakaoAK ${API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('응답 상태:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API 오류 (${response.status}): ${errorText}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const result = {
+                        거리: `${(route.summary.distance / 1000).toFixed(1)}km`,
+                        시간: `${Math.ceil(route.summary.duration / 60)}분`,
+                        요금: `${route.summary.fare?.taxi || '계산 불가'}원`,
+                        경로점수: route.sections?.reduce((sum, s) => sum + (s.roads?.length || 0), 0) || 0
+                    };
+                    
+                    resultDiv.textContent = JSON.stringify(result, null, 2);
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error('경로 데이터 없음');
+                }
+            } catch (error) {
+                console.error('에러:', error);
+                resultDiv.textContent = `에러: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function testSearchAPI() {
+            const query = document.getElementById('search-query').value || '강남역';
+            const resultDiv = document.getElementById('search-result');
+            resultDiv.textContent = '검색 중...';
+            resultDiv.className = 'result';
+
+            try {
+                const url = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `KakaoAK ${API_KEY}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API 오류 (${response.status})`);
+                }
+
+                const data = await response.json();
+                
+                if (data.documents && data.documents.length > 0) {
+                    const results = data.documents.slice(0, 3).map(place => ({
+                        이름: place.place_name,
+                        주소: place.address_name,
+                        카테고리: place.category_name
+                    }));
+                    
+                    resultDiv.textContent = JSON.stringify(results, null, 2);
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.textContent = '검색 결과 없음';
+                    resultDiv.className = 'result';
+                }
+            } catch (error) {
+                console.error('에러:', error);
+                resultDiv.textContent = `에러: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function testGeocodeAPI() {
+            const resultDiv = document.getElementById('geocode-result');
+            resultDiv.textContent = '테스트 중...';
+            resultDiv.className = 'result';
+
+            try {
+                const url = `https://dapi.kakao.com/v2/local/geo/coord2address.json?x=126.9780&y=37.5665`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `KakaoAK ${API_KEY}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API 오류 (${response.status})`);
+                }
+
+                const data = await response.json();
+                
+                if (data.documents && data.documents.length > 0) {
+                    const doc = data.documents[0];
+                    const result = {
+                        지번주소: doc.address?.address_name || '없음',
+                        도로명주소: doc.road_address?.address_name || '없음'
+                    };
+                    
+                    resultDiv.textContent = JSON.stringify(result, null, 2);
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.textContent = '주소 정보 없음';
+                    resultDiv.className = 'result';
+                }
+            } catch (error) {
+                console.error('에러:', error);
+                resultDiv.textContent = `에러: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        // 페이지 로드 시 안내
+        console.log('카카오 API 테스트 페이지');
+        console.log('API 키:', API_KEY);
+        console.log('CORS 문제가 발생하면 프록시 서버를 사용하거나 서버 사이드에서 호출해야 합니다.');
+    </script>
+</body>
+</html>
