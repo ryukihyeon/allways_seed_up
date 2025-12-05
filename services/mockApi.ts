@@ -18,6 +18,37 @@ import { fetchRoadBlockInfo, filterActiveBlocks } from './roadBlockApi';
 // Simulate API delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// 좌표 기반 근사 주소 생성
+function generateApproximateAddress(lat: number, lng: number): LocationInfo {
+  // 서울 주요 구역 판단
+  let district = '중구';
+  let street = '세종대로';
+  
+  if (lat > 37.52 && lng > 127.03) {
+    district = '강남구';
+    street = '테헤란로';
+  } else if (lat > 37.55 && lng < 126.95) {
+    district = '마포구';
+    street = '마포대로';
+  } else if (lat < 37.52 && lng > 127.0) {
+    district = '서초구';
+    street = '서초대로';
+  } else if (lat > 37.57) {
+    district = '종로구';
+    street = '종로';
+  }
+  
+  const number = Math.floor(Math.random() * 100) + 1;
+  
+  return {
+    lat,
+    lng,
+    address: `서울특별시 ${district} ${street} ${number}`,
+    roadAddress: `서울특별시 ${district} ${street} ${number}`,
+    name: '선택된 위치'
+  };
+}
+
 // Mock Autocomplete Data (충전소 포함)
 const MOCK_PLACES = [
   "강남구청", "강남 복지관", "강남 도서관",
@@ -77,7 +108,7 @@ export const api = {
     return Math.min(10, parseFloat(randomSlope.toFixed(1)));
   },
 
-  // 카카오 API를 사용한 역지오코딩
+  // 역지오코딩 (좌표 → 주소 변환)
   reverseGeocode: async (lat: number, lng: number): Promise<LocationInfo> => {
     await delay(200);
     
@@ -98,19 +129,15 @@ export const api = {
             name: '선택된 위치'
           };
         }
+      } else if (response.status === 403) {
+        console.warn('⚠️ 카카오 API 키 문제. 근사 주소 사용');
       }
     } catch (error) {
-      console.error('카카오 역지오코딩 실패:', error);
+      console.warn('⚠️ 역지오코딩 실패. 근사 주소 사용');
     }
 
-    // API 실패 시 기본값 반환
-    return {
-      lat,
-      lng,
-      address: `서울 중구 세종대로 ${Math.floor(Math.random() * 100)}길`,
-      roadAddress: `서울특별시 중구 태평로 ${Math.floor(Math.random() * 50)}`,
-      name: '선택된 위치'
-    };
+    // API 실패 시 근사 주소 생성
+    return generateApproximateAddress(lat, lng);
   },
 
   // 카카오 API를 사용한 장소 검색

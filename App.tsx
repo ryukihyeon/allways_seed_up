@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapComponent } from './components/MapComponent';
+import { KakaoMapComponent } from './components/KakaoMapComponent';
 import { ControlPanel } from './components/ControlPanel';
 import { StationModal } from './components/StationModal';
 import { BatteryDrawer } from './components/BatteryDrawer';
@@ -31,9 +31,13 @@ const App: React.FC = () => {
   
   const [batteryLevel, setBatteryLevel] = useState<number>(80);
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    modelName: WHEELCHAIR_MODELS[1].name,
-    batteryCapacityAh: WHEELCHAIR_MODELS[1].capacity,
-    weightTotal: WHEELCHAIR_MODELS[1].weight
+    modelName: '모토메드 파워체어 P200',
+    batteryCapacityAh: 35,
+    batteryVoltage: 24,
+    wheelchairWeight: 55,
+    userWeight: 70,
+    weightTotal: 125,
+    productId: 'wc_002'
   });
   const [environment, setEnvironment] = useState<EnvironmentData>({
     temp: 20,
@@ -101,6 +105,11 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // 개발/테스트용: 위치를 서울 시청으로 고정
+    console.log("📍 위치 고정: 서울 시청 (37.5665, 126.9780)");
+    setUserLocation(INITIAL_CENTER);
+    
+    /* 실제 위치 사용 시 아래 주석 해제
     if (!navigator.geolocation) {
       console.warn("Geolocation is not supported by this browser. Using default location (Seoul City Hall).");
       // 위치 권한이 없으면 서울 시청으로 설정
@@ -130,6 +139,7 @@ const App: React.FC = () => {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
+    */
   }, []);
 
   useEffect(() => {
@@ -225,6 +235,28 @@ const App: React.FC = () => {
     }
   };
 
+  const handleStationNavigate = async (lat: number, lng: number) => {
+    if (!userLocation) {
+      alert('현재 위치를 확인할 수 없습니다.');
+      return;
+    }
+
+    console.log('🧭 충전소로 길찾기:', { from: userLocation, to: { lat, lng } });
+    
+    setSelectedRoute(null);
+    setRouteDestination({ lat, lng });
+    
+    // 경로 계산
+    const routes = await api.calculateRoutes(userLocation, { lat, lng });
+    setSearchResults(routes);
+    
+    // 첫 번째 경로를 자동 선택 (도보 우선)
+    const walkRoute = routes.find(r => r.mode === 'WALK') || routes[0];
+    if (walkRoute) {
+      setSelectedRoute(walkRoute);
+    }
+  };
+
   const handleReportCurrentLocation = () => {
       if (userLocation) {
           setNewReportCoords({ lat: userLocation.lat, lng: userLocation.lng });
@@ -300,7 +332,7 @@ const App: React.FC = () => {
   return (
     <div className="relative w-full h-screen bg-gray-50 overflow-hidden font-sans">
       
-      <MapComponent
+      <KakaoMapComponent
         center={INITIAL_CENTER}
         stations={stations}
         reports={reports}
@@ -348,6 +380,7 @@ const App: React.FC = () => {
       <StationModal
         station={selectedStation}
         onClose={() => setSelectedStation(null)}
+        onNavigate={handleStationNavigate}
       />
 
       <LocationActionSheet 

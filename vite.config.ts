@@ -37,6 +37,12 @@ export default defineConfig(({ mode }) => {
               });
             }
           },
+          '/wheelchair-api': {
+            target: 'https://apis.data.go.kr/B552583/productlist',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/wheelchair-api/, ''),
+            secure: false
+          },
           '/safemap-api': {
             target: 'http://safemap.go.kr/openapi2',
             changeOrigin: true,

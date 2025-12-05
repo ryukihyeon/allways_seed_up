@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, BatteryCharging, Settings, User, Scale, Activity, Thermometer, Mountain } from 'lucide-react';
 import { UserProfile, EnvironmentData } from '../types';
-import { WHEELCHAIR_MODELS } from '../constants';
+import { fetchWheelchairProducts, calculateTotalWeight, type WheelchairProduct } from '../services/wheelchairApi';
 
 interface BatteryDrawerProps {
   isOpen: boolean;
@@ -23,24 +23,51 @@ export const BatteryDrawer: React.FC<BatteryDrawerProps> = ({
   environment
 }) => {
   const [activeTab, setActiveTab] = useState<'STATUS' | 'SETTINGS'>('STATUS');
-  const [selectedModelIdx, setSelectedModelIdx] = useState<number>(1); // Default to Standard Heavy
+  const [wheelchairProducts, setWheelchairProducts] = useState<WheelchairProduct[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
-  const handleModelChange = (idx: number) => {
-    setSelectedModelIdx(idx);
-    const model = WHEELCHAIR_MODELS[idx];
+  // 제품 목록 로드
+  useEffect(() => {
+    const loadProducts = async () => {
+      setIsLoadingProducts(true);
+      const products = await fetchWheelchairProducts();
+      setWheelchairProducts(products);
+      setIsLoadingProducts(false);
+      
+      // 첫 번째 제품을 기본 선택
+      if (products.length > 0 && !selectedProductId) {
+        handleProductChange(products[0]);
+      }
+    };
+    
+    if (isOpen) {
+      loadProducts();
+    }
+  }, [isOpen]);
+
+  const handleProductChange = (product: WheelchairProduct) => {
+    setSelectedProductId(product.id);
+    const totalWeight = calculateTotalWeight(product.weight, profile.userWeight || 70);
+    
     setProfile({
-        modelName: model.name,
-        batteryCapacityAh: model.capacity,
-        weightTotal: model.weight
+      modelName: `${product.manufacturer} ${product.modelName}`,
+      batteryCapacityAh: product.batteryCapacityAh,
+      batteryVoltage: product.batteryVoltage,
+      wheelchairWeight: product.weight,
+      userWeight: profile.userWeight || 70,
+      weightTotal: totalWeight,
+      productId: product.id
     });
   };
 
-  const handleProfileChange = (key: keyof UserProfile, value: any) => {
-    // When custom editing, switch dropdown to "Custom" (last index)
-    if (selectedModelIdx !== WHEELCHAIR_MODELS.length - 1) {
-        setSelectedModelIdx(WHEELCHAIR_MODELS.length - 1);
-    }
-    setProfile({ ...profile, [key]: value });
+  const handleUserWeightChange = (weight: number) => {
+    const totalWeight = calculateTotalWeight(profile.wheelchairWeight, weight);
+    setProfile({
+      ...profile,
+      userWeight: weight,
+      weightTotal: totalWeight
+    });
   };
 
   if (!isOpen) return null;
@@ -145,48 +172,87 @@ export const BatteryDrawer: React.FC<BatteryDrawerProps> = ({
                         정확한 주행 가능 거리를 계산하기 위해<br/>사용자 및 기기 정보를 입력해주세요.
                     </p>
 
-                    {/* Preset Model Select */}
+                    {/* 휠체어 제품 선택 */}
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">휠체어 모델 선택</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                            전동휠체어 모델 선택
+                            {isLoadingProducts && <span className="text-xs text-gray-400 ml-2">(로딩 중...)</span>}
+                        </label>
                         <select 
-                            value={selectedModelIdx}
-                            onChange={(e) => handleModelChange(parseInt(e.target.value))}
-                            className="w-full p-3 rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={selectedProductId}
+                            onChange={(e) => {
+                                const product = wheelchairProducts.find(p => p.id === e.target.value);
+                                if (product) handleProductChange(product);
+                            }}
+                            className="w-full p-3 rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            disabled={isLoadingProducts}
                         >
-                            {WHEELCHAIR_MODELS.map((m, idx) => (
-                                <option key={idx} value={idx}>{m.name}</option>
+                            {wheelchairProducts.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                    {product.modelName} ({product.batteryCapacityAh}Ah, {product.weight}kg)
+                                </option>
                             ))}
                         </select>
+                        <p className="text-xs text-gray-400 mt-1">
+                            * 보조공학기기 제품 정보 API 기반
+                        </p>
                     </div>
 
-                    {/* Manual Inputs */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">배터리 용량 (Ah)</label>
-                            <div className="relative">
-                                <input 
-                                    type="number"
-                                    value={profile.batteryCapacityAh}
-                                    onChange={(e) => handleProfileChange('batteryCapacityAh', Number(e.target.value))}
-                                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                                />
-                                <span className="absolute right-3 top-3 text-xs text-gray-400 font-bold">Ah</span>
-                            </div>
+                    {/* 사용자 몸무게 입력 */}
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                        <label className="block text-sm font-bold text-gray-700 mb-3">
+                            <Scale size={16} className="inline mr-1"/>
+                            사용자 몸무게
+                        </label>
+                        <div className="relative">
+                            <input 
+                                type="number"
+                                value={profile.userWeight || 70}
+                                onChange={(e) => handleUserWeightChange(Number(e.target.value))}
+                                min="30"
+                                max="150"
+                                className="w-full p-3 rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 outline-none font-mono text-lg font-bold"
+                            />
+                            <span className="absolute right-3 top-3 text-sm text-gray-500 font-bold">kg</span>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">총 무게 (kg)</label>
-                            <div className="relative">
-                                <input 
-                                    type="number"
-                                    value={profile.weightTotal}
-                                    onChange={(e) => handleProfileChange('weightTotal', Number(e.target.value))}
-                                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                                />
-                                <span className="absolute right-3 top-3 text-xs text-gray-400 font-bold">kg</span>
+                        <div className="mt-3 p-3 bg-white rounded-lg">
+                            <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                <span>휠체어 무게</span>
+                                <span className="font-bold">{profile.wheelchairWeight}kg</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                <span>사용자 몸무게</span>
+                                <span className="font-bold">{profile.userWeight || 70}kg</span>
+                            </div>
+                            <div className="w-full h-px bg-gray-200 my-2"></div>
+                            <div className="flex justify-between text-sm font-bold text-blue-600">
+                                <span>총 무게</span>
+                                <span>{profile.weightTotal}kg</span>
                             </div>
                         </div>
                     </div>
-                    <p className="text-xs text-gray-400">* 총 무게 = 사용자 체중 + 휠체어 무게</p>
+
+                    {/* 제품 상세 정보 */}
+                    {selectedProductId && (
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">제품 상세 정보</h4>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div>
+                                    <p className="text-gray-500">배터리 용량</p>
+                                    <p className="font-bold text-gray-800">{profile.batteryCapacityAh}Ah × {profile.batteryVoltage}V</p>
+                                    <p className="text-gray-400">= {profile.batteryCapacityAh * profile.batteryVoltage}Wh</p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500">휠체어 무게</p>
+                                    <p className="font-bold text-gray-800">{profile.wheelchairWeight}kg</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="text-xs text-gray-400 p-2 text-center bg-yellow-50 rounded-lg border border-yellow-200">
+                        ⚠️ 무게가 증가하면 배터리 소모가 많아져 주행 거리가 감소합니다.
+                    </div>
                 </div>
             )}
         </div>

@@ -5,10 +5,18 @@ import { X, Navigation, Phone, AlertCircle } from 'lucide-react';
 interface StationModalProps {
   station: Station | null;
   onClose: () => void;
+  onNavigate?: (lat: number, lng: number) => void;
 }
 
-export const StationModal: React.FC<StationModalProps> = ({ station, onClose }) => {
+export const StationModal: React.FC<StationModalProps> = ({ station, onClose, onNavigate }) => {
   if (!station) return null;
+
+  const handleNavigate = () => {
+    if (onNavigate) {
+      onNavigate(station.lat, station.lng);
+      onClose();
+    }
+  };
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-[2000] p-4 animate-slide-up">
@@ -41,11 +49,17 @@ export const StationModal: React.FC<StationModalProps> = ({ station, onClose }) 
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-6">
-            <button className="flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-medium active:bg-blue-700">
+            <button 
+              onClick={handleNavigate}
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-medium active:bg-blue-700 hover:bg-blue-700 transition-colors"
+            >
                 <Navigation size={18} />
                 길찾기
             </button>
-            <button className="flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-medium active:bg-gray-50">
+            <button 
+              onClick={() => alert('전화 기능은 준비 중입니다.')}
+              className="flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-medium active:bg-gray-50 hover:bg-gray-50 transition-colors"
+            >
                 <Phone size={18} />
                 전화하기
             </button>

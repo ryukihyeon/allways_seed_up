@@ -23,7 +23,11 @@ export interface Report {
 export interface UserProfile {
   modelName: string;
   batteryCapacityAh: number; // 배터리 용량 (Ampere-hours)
-  weightTotal: number; // 사용자 + 휠체어 무게 (kg)
+  batteryVoltage: number; // 배터리 전압 (V)
+  wheelchairWeight: number; // 휠체어 자체 무게 (kg)
+  userWeight: number; // 사용자 몸무게 (kg)
+  weightTotal: number; // 총 무게 (휠체어 + 사용자) (kg)
+  productId?: string; // 제품 ID (API 연동용)
 }
 
 // 자동 수집되는 환경 정보
