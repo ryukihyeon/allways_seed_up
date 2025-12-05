@@ -18,15 +18,24 @@ export interface RoadBlockInfo {
 }
 
 const API_KEY = '7892694858';
-const BASE_URL = 'http://safemap.go.kr/openapi2/IF_0043';
 
 /**
  * 도로 차단 정보 조회
+ * 
+ * 참고: 안전지도 API는 CORS 정책으로 인해 브라우저에서 직접 호출 불가
+ * 프로덕션 환경에서는 백엔드 서버를 통해 호출해야 함
+ * 현재는 목 데이터 사용
  */
 export async function fetchRoadBlockInfo(
   pageNo: number = 1,
   numOfRows: number = 100
 ): Promise<RoadBlockInfo[]> {
+  // 안전지도 API는 CORS 문제로 브라우저에서 직접 호출 불가
+  // 백엔드 서버 구축 전까지는 목 데이터 사용
+  console.log('🚧 도로 차단 정보: 목 데이터 사용 (API CORS 제한)');
+  return getMockRoadBlocks();
+  
+  /* 백엔드 서버 구축 후 사용할 코드:
   try {
     const params = new URLSearchParams({
       serviceKey: API_KEY,
@@ -35,13 +44,14 @@ export async function fetchRoadBlockInfo(
       returnType: 'json'
     });
 
-    const url = `${BASE_URL}?${params}`;
+    // 백엔드 API 엔드포인트
+    const url = `/api/roadblocks?${params}`;
     
     const response = await fetch(url);
     
     if (!response.ok) {
       console.warn('도로 차단 정보 API 호출 실패:', response.status);
-      return [];
+      return getMockRoadBlocks();
     }
 
     const data = await response.json();
@@ -56,8 +66,9 @@ export async function fetchRoadBlockInfo(
     return items.map(parseRoadBlockItem).filter(Boolean);
   } catch (error) {
     console.error('도로 차단 정보 조회 실패:', error);
-    return getMockRoadBlocks(); // 폴백: 목 데이터
+    return getMockRoadBlocks();
   }
+  */
 }
 
 /**
@@ -111,9 +122,14 @@ function parseSeverity(severity: string): RoadBlockInfo['severity'] {
 }
 
 /**
- * 목 데이터 (API 실패 시 사용)
+ * 목 데이터 (데모용)
+ * 실제 서비스에서는 백엔드 API를 통해 안전지도 데이터 조회
  */
 function getMockRoadBlocks(): RoadBlockInfo[] {
+  const now = new Date();
+  const oneMonthLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const twoMonthsLater = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+  
   return [
     {
       id: 'mock_1',
@@ -121,8 +137,8 @@ function getMockRoadBlocks(): RoadBlockInfo[] {
       location: '서울 강남구 강남대로 396',
       lat: 37.4979,
       lng: 127.0276,
-      startDate: '2024-01-15',
-      endDate: '2024-03-31',
+      startDate: now.toISOString().split('T')[0],
+      endDate: twoMonthsLater.toISOString().split('T')[0],
       blockType: 'construction',
       severity: 'high',
       description: '지하철 9호선 연장 공사로 인한 차선 통제',
@@ -134,8 +150,8 @@ function getMockRoadBlocks(): RoadBlockInfo[] {
       location: '서울 영등포구 여의도동',
       lat: 37.5219,
       lng: 126.9245,
-      startDate: '2024-02-01',
-      endDate: '2024-04-30',
+      startDate: now.toISOString().split('T')[0],
+      endDate: twoMonthsLater.toISOString().split('T')[0],
       blockType: 'repair',
       severity: 'medium',
       description: '한강대교 노면 보수 공사',
@@ -147,8 +163,8 @@ function getMockRoadBlocks(): RoadBlockInfo[] {
       location: '서울 종로구 세종대로 172',
       lat: 37.5716,
       lng: 126.9768,
-      startDate: '2024-03-01',
-      endDate: '2024-03-03',
+      startDate: now.toISOString().split('T')[0],
+      endDate: oneMonthLater.toISOString().split('T')[0],
       blockType: 'event',
       severity: 'low',
       description: '문화 행사로 인한 일시적 통행 제한',

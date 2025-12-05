@@ -43,14 +43,19 @@ export const kakaoApi = {
   ): Promise<RouteOption | null> => {
     try {
       // Tmap 보행자 경로 API 호출
-      const url = '/tmap-api/routes/pedestrian?version=1&format=json';
+      // 참고: 프록시를 통해 호출되며, appKey는 vite.config.ts에서 자동 추가됨
+      const url = '/tmap-api/routes/pedestrian?version=1';
       
-      console.log('🚶 Tmap 보행자 API 호출');
+      console.log('🚶 Tmap 보행자 API 호출:', {
+        출발: `${startLat}, ${startLng}`,
+        도착: `${endLat}, ${endLng}`
+      });
       
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           startX: startLng.toString(),
@@ -118,10 +123,14 @@ export const kakaoApi = {
             path: path
           };
         }
+      } else if (response.status === 403) {
+        // API 키 문제
+        console.warn('⚠️ Tmap API 키 없음 또는 유효하지 않음. 직선 거리 기반 경로 사용');
+        console.info('💡 Tmap API 키 발급: https://openapi.sk.com/');
+      } else {
+        // 기타 에러
+        console.warn(`⚠️ Tmap API 오류 (${response.status}). 직선 거리 기반 경로 사용`);
       }
-
-      // API 실패 시 폴백
-      console.warn('⚠️ Tmap API 실패, 직선 거리 사용');
       const distanceKm = calculateDistance(startLat, startLng, endLat, endLng);
       const actualDistanceKm = distanceKm * 1.2;
       const wheelchairSpeed = 3.5;

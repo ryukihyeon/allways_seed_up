@@ -102,7 +102,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      console.warn("Geolocation is not supported by this browser.");
+      console.warn("Geolocation is not supported by this browser. Using default location (Seoul City Hall).");
+      // 위치 권한이 없으면 서울 시청으로 설정
+      setUserLocation(INITIAL_CENTER);
       return;
     }
 
@@ -119,6 +121,11 @@ const App: React.FC = () => {
       },
       (error) => {
         console.warn("Error getting location:", error.message);
+        // 위치 에러 발생 시 서울 시청으로 설정
+        if (!userLocation) {
+          console.log("📍 위치 권한 없음. 기본 위치(서울 시청)로 설정합니다.");
+          setUserLocation(INITIAL_CENTER);
+        }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );

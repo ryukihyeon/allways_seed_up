@@ -790,3 +790,260 @@ Tmap API가 실패하면 자동으로 직선 거리 기반 계산으로 전환�
 - 경사도 정보 연동
 - 엘리베이터 위치 표시
 - 휠체어 접근성 점수 계산
+
+
+## 17) 안전지도 API CORS 문제 해결 방법
+
+### 문제 상황
+안전지도 API는 서버에서 CORS 헤더를 중복으로 보내는 문제가 있어 브라우저에서 직접 호출 불가능합니다.
+
+```
+Access-Control-Allow-Origin: *, http://localhost:3000
+(중복된 헤더로 인해 브라우저가 차단)
+```
+
+### 현재 해결책: 목 데이터 사용
+개발 단계에서는 실제와 유사한 목 데이터를 사용합니다.
+
+```typescript
+// services/roadBlockApi.ts
+export async function fetchRoadBlockInfo() {
+  // 목 데이터 반환 (3개의 샘플 도로 차단 정보)
+  return getMockRoadBlocks();
+}
+```
+
+### 프로덕션 해결책: 백엔드 서버 구축
+
+#### 1. Node.js/Express 백엔드 예시
+```javascript
+// server.js
+const express = require('express');
+const fetch = require('node-fetch');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+
+app.get('/api/roadblocks', async (req, res) => {
+  try {
+    const response = await fetch(
+      'http://safemap.go.kr/openapi2/IF_0043?serviceKey=7892694858&pageNo=1&numOfRows=100&returnType=json'
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch road blocks' });
+  }
+});
+
+app.listen(3001, () => console.log('Backend server running on port 3001'));
+```
+
+#### 2. 프론트엔드 수정
+```typescript
+// services/roadBlockApi.ts
+const url = `/api/roadblocks?${params}`;
+const response = await fetch(url);
+```
+
+### 대안: 서버리스 함수
+
+#### Vercel/Netlify Functions
+```javascript
+// api/roadblocks.js
+export default async function handler(req, res) {
+  const response = await fetch(
+    'http://safemap.go.kr/openapi2/IF_0043?serviceKey=7892694858&pageNo=1&numOfRows=100&returnType=json'
+  );
+  const data = await response.json();
+  res.json(data);
+}
+```
+
+### 목 데이터 특징
+- ✅ 실제 서울 지역 위치 기반
+- ✅ 현재 날짜부터 1-2개월 후까지 유효
+- ✅ 다양한 차단 유형 (공사, 보수, 행사)
+- ✅ 심각도 구분 (high, medium, low)
+- ✅ 우회 정보 포함
+
+### 향후 계획
+1. 백엔드 서버 구축 (Node.js/Express)
+2. 실시간 안전지도 API 연동
+3. 사용자 제보 데이터와 통합
+4. 크라우드소싱 기반 실시간 업데이트
+
+
+## 18) Tmap API 상세 설정 가이드
+
+### API 요청 규칙
+
+Tmap API는 다음 규칙을 따라야 합니다:
+
+1. **프로토콜**: HTTP/HTTPS 사용
+2. **필수 헤더**:
+   - `appKey`: 발급받은 API 키
+   - `Accept`: 응답 형식 (application/json)
+   - `Content-Type`: application/json (POST 요청 시)
+
+3. **응답 형식**: JSON (기본값), XML, JSONP 지원
+4. **파라미터 구분**: 앰퍼샌드(&) 사용
+
+### 현재 구현
+
+#### 프록시 설정 (vite.config.ts)
+```typescript
+'/tmap-api': {
+  target: 'https://apis.openapi.sk.com/tmap',
+  changeOrigin: true,
+  rewrite: (path) => path.replace(/^\/tmap-api/, ''),
+  configure: (proxy, options) => {
+    proxy.on('proxyReq', (proxyReq, req, res) => {
+      // Tmap API 필수 헤더 추가
+      proxyReq.setHeader('appKey', env.VITE_TMAP_API_KEY);
+      proxyReq.setHeader('Accept', 'application/json');
+    });
+  }
+}
+```
+
+#### API 호출 (kakaoApi.ts)
+```typescript
+const response = await fetch('/tmap-api/routes/pedestrian?version=1', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  },
+  body: JSON.stringify({
+    startX: startLng.toString(),
+    startY: startLat.toString(),
+    endX: endLng.toString(),
+    endY: endLat.toString(),
+    reqCoordType: 'WGS84GEO',
+    resCoordType: 'WGS84GEO',
+    startName: '출발지',
+    endName: '도착지'
+  })
+});
+```
+
+### API 응답 구조
+
+#### 성공 응답
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[lng, lat], [lng, lat], ...]
+      },
+      "properties": {
+        "totalDistance": 1234,  // 미터
+        "totalTime": 600,       // 초
+        "index": 0,
+        "pointIndex": 0,
+        "name": "도로명",
+        "description": "설명",
+        "direction": "방향",
+        "nearPoiName": "근처 POI",
+        "nearPoiX": "경도",
+        "nearPoiY": "위도",
+        "intersectionName": "교차로명",
+        "facilityType": "시설물 타입",
+        "facilityName": "시설물명",
+        "turnType": 0,
+        "pointType": "SP"
+      }
+    }
+  ]
+}
+```
+
+#### 에러 응답
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "에러 메시지"
+  }
+}
+```
+
+### 주요 에러 코드
+
+| 코드 | 설명 | 해결 방법 |
+|------|------|-----------|
+| 1000 | appKey 누락 | 헤더에 appKey 추가 |
+| 1001 | 잘못된 appKey | API 키 재확인 |
+| 2000 | 필수 파라미터 누락 | startX, startY, endX, endY 확인 |
+| 3000 | 경로 탐색 실패 | 좌표 유효성 확인 |
+| 4000 | 서버 오류 | 잠시 후 재시도 |
+
+### 테스트 방법
+
+#### 1. 브라우저 콘솔
+```javascript
+// F12 개발자 도구 → Console
+// 다음 로그 확인:
+🚶 Tmap 보행자 API 호출: { 출발: '37.5665, 126.9780', 도착: '37.4979, 127.0276' }
+✅ Tmap 보행자 경로: { 거리: '2.1km', 시간: '35분', 경로점: 245 }
+```
+
+#### 2. Network 탭
+```
+Request URL: http://localhost:3000/tmap-api/routes/pedestrian?version=1
+Request Method: POST
+Status Code: 200 OK
+
+Request Headers:
+  Content-Type: application/json
+  Accept: application/json
+  appKey: YOUR_API_KEY
+
+Request Payload:
+  {
+    "startX": "126.9780",
+    "startY": "37.5665",
+    "endX": "127.0276",
+    "endY": "37.4979",
+    "reqCoordType": "WGS84GEO",
+    "resCoordType": "WGS84GEO",
+    "startName": "출발지",
+    "endName": "도착지"
+  }
+```
+
+### 폴백 시스템
+
+Tmap API 실패 시 자동으로 직선 거리 기반 계산으로 전환:
+
+```typescript
+// API 실패 시
+console.warn('⚠️ Tmap API 실패, 직선 거리 사용');
+const distanceKm = calculateDistance(startLat, startLng, endLat, endLng);
+const actualDistanceKm = distanceKm * 1.2; // 건물 우회 보정
+```
+
+### 프로덕션 배포 시 주의사항
+
+1. **환경 변수 설정**
+   ```bash
+   VITE_TMAP_API_KEY=실제_발급받은_키
+   ```
+
+2. **CORS 정책**
+   - 개발: Vite 프록시 사용
+   - 프로덕션: 백엔드 서버 또는 서버리스 함수 필요
+
+3. **API 사용량 모니터링**
+   - 무료: 일 10,000건
+   - 초과 시 유료 전환 또는 캐싱 전략 필요
+
+4. **에러 핸들링**
+   - 모든 API 호출에 try-catch 적용
+   - 폴백 시스템으로 서비스 연속성 보장
