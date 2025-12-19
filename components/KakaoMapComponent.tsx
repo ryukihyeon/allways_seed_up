@@ -147,10 +147,17 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     stations.forEach(station => {
       const position = new window.kakao.maps.LatLng(station.lat, station.lng);
       
+      // 지하철 충전소와 일반 충전소 구분
+      const isSubway = station.type === 'SUBWAY';
+      const icon = isSubway ? '🚇' : '⚡';
+      const bgColor = isSubway 
+        ? (station.isAvailable ? '#10b981' : '#6b7280') // 초록색 (지하철)
+        : (station.isAvailable ? '#10b981' : '#6b7280'); // 초록색 (일반)
+      
       // DOM 요소 생성
       const markerDiv = document.createElement('div');
       markerDiv.style.cssText = `
-        background: ${station.isAvailable ? '#10b981' : '#6b7280'};
+        background: ${bgColor};
         color: white;
         padding: 8px 12px;
         border-radius: 20px;
@@ -159,18 +166,34 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         cursor: pointer;
         white-space: nowrap;
+        z-index: 1000;
+        position: relative;
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        ${isSubway ? 'border: 2px solid #059669;' : ''}
       `;
-      markerDiv.innerHTML = `⚡ ${station.name}`;
+      markerDiv.innerHTML = `${icon} ${station.name}${isSubway && station.lineName ? ` (${station.lineName})` : ''}`;
       
-      // 클릭 이벤트 추가
-      markerDiv.addEventListener('click', () => {
+      // 클릭 이벤트 추가 - 더 강력한 방식
+      const handleMarkerClick = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🖱️ 마커 클릭됨:', station.name, 'type:', station.type);
+        console.log('🔍 전체 station 객체:', station);
         onStationClick(station);
-      });
+      };
+      
+      markerDiv.addEventListener('click', handleMarkerClick);
+      markerDiv.addEventListener('mousedown', handleMarkerClick);
+      markerDiv.addEventListener('touchstart', handleMarkerClick);
 
       const marker = new window.kakao.maps.CustomOverlay({
         position: position,
         content: markerDiv,
-        yAnchor: 1
+        yAnchor: 1,
+        zIndex: isSubway ? 10 : 5
       });
 
       marker.setMap(mapRef.current);

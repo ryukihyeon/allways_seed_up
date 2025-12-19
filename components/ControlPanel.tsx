@@ -1,5 +1,5 @@
 import React from 'react';
-import { Battery, Layers, AlertTriangle, Crosshair, Camera } from 'lucide-react';
+import { Battery, Layers, AlertTriangle, Crosshair, Camera, RefreshCw } from 'lucide-react';
 
 interface ControlPanelProps {
   showStations: boolean;
@@ -12,6 +12,7 @@ interface ControlPanelProps {
   onCenterLocation: () => void;
   isFollowingUser: boolean;
   onReportCurrentLocation: () => void;
+  onRefreshLocation?: () => void; // 위치 새로고침 함수 (선택적)
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -24,7 +25,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   weatherTemp,
   onCenterLocation,
   isFollowingUser,
-  onReportCurrentLocation
+  onReportCurrentLocation,
+  onRefreshLocation
 }) => {
   // Toggle for showing/hiding all layers (Stations + Reports)
   const toggleLayers = () => {
@@ -85,6 +87,18 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                <AlertTriangle size={26} fill="currentColor" className="text-white" />
                <span className="text-[10px] font-bold">위험신고</span>
             </button>
+
+            {/* Location Refresh Button */}
+            {onRefreshLocation && (
+              <button
+                onClick={onRefreshLocation}
+                className="bg-green-500 hover:bg-green-600 text-white p-4 rounded-2xl shadow-xl transition-transform active:scale-95 flex flex-col items-center justify-center gap-1 w-20 h-20"
+                aria-label="위치 새로고침"
+              >
+                <RefreshCw size={26} />
+                <span className="text-[10px] font-bold">위치갱신</span>
+              </button>
+            )}
 
             {/* Battery Button */}
             <button

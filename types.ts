@@ -1,11 +1,19 @@
 export interface Station {
-  id: number;
+  id: number | string;
   name: string;
   lat: number;
   lng: number;
   address: string;
   isAvailable: boolean; // 충전기 상태
-  type: 'FAST' | 'NORMAL';
+  type: 'FAST' | 'NORMAL' | 'SUBWAY';
+  // 지하철 충전소 전용 필드
+  lineCode?: string;
+  lineName?: string;
+  chargingLocation?: string;
+  // 실시간 충전기 정보 필드
+  fastChargerCount?: number;
+  normalChargerCount?: number;
+  hasCharger?: boolean;
 }
 
 export interface Report {

@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/kakao-api/, ''),
             headers: {
-              'Authorization': `KakaoAK ${env.VITE_KAKAO_API_KEY}`
+              'Authorization': `KakaoAK ${env.VITE_KAKAO_REST_API_KEY}`
             }
           },
           '/kakao-navi': {
@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/kakao-navi/, ''),
             headers: {
-              'Authorization': `KakaoAK ${env.VITE_KAKAO_API_KEY}`
+              'Authorization': `KakaoAK ${env.VITE_KAKAO_REST_API_KEY}`
             }
           },
           '/tmap-api': {
@@ -48,6 +48,18 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/safemap-api/, ''),
             secure: false
+          },
+          '/daegu-subway-api': {
+            target: 'https://www.dtro.or.kr/openApi',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/daegu-subway-api/, ''),
+            secure: true,
+            configure: (proxy, options) => {
+              proxy.on('proxyReq', (proxyReq, req, res) => {
+                // 대구 지하철 API 필수 헤더 추가
+                proxyReq.setHeader('Accept', 'application/xml');
+              });
+            }
           }
         }
       },

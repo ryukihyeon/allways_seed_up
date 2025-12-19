@@ -1,4 +1,4 @@
-import { MOCK_STATIONS, MOCK_REPORTS, MOCK_WEATHER } from '../constants';
+import { MOCK_WEATHER } from '../constants';
 import { Station, Report, UserProfile, EnvironmentData, LocationInfo, RouteOption } from '../types';
 import { kakaoApi } from './kakaoApi';
 import { 
@@ -49,32 +49,92 @@ function generateApproximateAddress(lat: number, lng: number): LocationInfo {
   };
 }
 
-// Mock Autocomplete Data (충전소 포함)
-const MOCK_PLACES = [
-  "강남구청", "강남 복지관", "강남 도서관",
-  "서울시청", "서울역", "서초구청",
-  "성동구민 체육센터", "성수역 2번 출구",
-  "장애인 고용공단", "국립 재활원",
-  "휠체어 수리센터 강북점", "한강공원 잠원지구 입구",
-  
-  // 충전소 검색 키워드
-  "충전소", "급속충전소", "전동휠체어 충전",
-  "서울시청 충전소", "강남구청 충전소", "강남역 충전소",
-  "홍대입구역 충전소", "잠실역 충전소", "용산역 충전소",
-  "가까운 충전소", "근처 충전소", "이용 가능한 충전소"
-];
+// 실제 장소 검색은 카카오 API를 통해서만 수행
 
 export const api = {
   getStations: async (): Promise<Station[]> => {
+    console.log('🔌 getStations 함수 시작');
     await delay(300);
-    return MOCK_STATIONS;
+    
+    // 일반 충전소 데이터 (기존)
+    const regularStations: Station[] = [
+      {
+        id: 'regular_1',
+        name: '서울시청 충전소',
+        address: '서울특별시 중구 세종대로 110',
+        lat: 37.5663,
+        lng: 126.9779,
+        type: 'FAST',
+        isAvailable: true
+      },
+      {
+        id: 'regular_2', 
+        name: '강남구청 충전소',
+        address: '서울특별시 강남구 학동로 426',
+        lat: 37.5172,
+        lng: 127.0473,
+        type: 'NORMAL',
+        isAvailable: true
+      },
+      {
+        id: 'regular_3',
+        name: '잠실역 충전소', 
+        address: '서울특별시 송파구 올림픽로 지하 265',
+        lat: 37.5133,
+        lng: 127.1000,
+        type: 'FAST',
+        isAvailable: false
+      }
+    ];
+    
+    try {
+      // 지하철 충전소 데이터 가져오기
+      const { fetchSubwayChargingStations } = await import('./subwayChargingApi');
+      const subwayStations = await fetchSubwayChargingStations();
+      
+      // SubwayChargingStation을 Station 형식으로 변환
+      const convertedSubwayStations: Station[] = subwayStations.map(station => ({
+        id: station.id,
+        name: station.stationName.endsWith('역') ? station.stationName : `${station.stationName}역`,
+        address: `${station.lineName} ${station.stationName.endsWith('역') ? station.stationName : `${station.stationName}역`} ${station.chargingLocation}`,
+        lat: station.lat,
+        lng: station.lng,
+        type: 'SUBWAY' as const,
+        isAvailable: station.isAvailable,
+        lineName: station.lineName,
+        lineCode: station.lineCode,
+        chargingLocation: station.chargingLocation
+      }));
+      
+      console.log(`🔌 지하철 충전소 ${convertedSubwayStations.length}개 로드 완료`);
+      console.log('🔍 변환된 지하철 충전소 데이터:', convertedSubwayStations);
+      
+      // 지하철 충전소가 없어도 일반 충전소는 반환
+      if (convertedSubwayStations.length === 0) {
+        console.log('🔌 지하철 충전소 API에서 데이터 없음, 일반 충전소만 반환');
+        return regularStations;
+      }
+      
+      const allStations = [...regularStations, ...convertedSubwayStations];
+      console.log('🎯 최종 반환 데이터:', {
+        일반충전소: regularStations.length,
+        지하철충전소: convertedSubwayStations.length,
+        총합: allStations.length,
+        지하철역목록: convertedSubwayStations.map(s => `${s.name}(${s.type})`)
+      });
+      
+      return allStations;
+    } catch (error) {
+      console.error('🔌 충전소 데이터 로드 실패:', error);
+      return regularStations; // 최소한 일반 충전소는 반환
+    }
   },
 
   getReports: async (): Promise<Report[]> => {
     await delay(300);
     const storedReports = localStorage.getItem('wheely_reports');
     const localReports = storedReports ? JSON.parse(storedReports) : [];
-    return [...MOCK_REPORTS, ...localReports];
+    return localReports; // 사용자가 직접 작성한 제보만 반환
   },
 
   postReport: async (report: Omit<Report, 'id' | 'createdAt'>): Promise<Report> => {
@@ -155,41 +215,7 @@ export const api = {
       console.error('카카오 장소 검색 실패, 로컬 데이터 사용:', error);
     }
     
-    // 충전소 검색 (로컬 데이터)
-    if (query.includes('충전') || query.includes('전동') || query.includes('배터리')) {
-      const stations = await api.getStations();
-      const matchingStations = stations
-        .filter(station => 
-          station.name.includes(query) || 
-          station.address.includes(query) ||
-          (query.includes('충전') && station.name.includes('충전소')) ||
-          (query.includes('가까운') || query.includes('근처'))
-        )
-        .slice(0, 3)
-        .map(station => ({
-          name: `🔌 ${station.name}`,
-          address: station.address,
-          roadAddress: station.address,
-          lat: station.lat,
-          lng: station.lng
-        }));
-      
-      results.push(...matchingStations);
-    }
-    
-    // 카카오 API 결과가 없으면 로컬 데이터 사용
-    if (results.length === 0) {
-      const matches = MOCK_PLACES.filter(place => place.includes(query));
-      const placeResults = matches.slice(0, 5).map((name, idx) => ({
-        name: name,
-        address: `서울시 가상구 ${name}로 ${idx + 1}길`,
-        roadAddress: `서울시 가상구 ${name}대로 ${idx + 10}`,
-        lat: 37.5665 + (Math.random() - 0.5) * 0.05,
-        lng: 126.9780 + (Math.random() - 0.5) * 0.05
-      }));
-      
-      results.push(...placeResults);
-    }
+    // 충전소 검색은 실제 API 연결 후 구현 예정
     
     return results.slice(0, 8);
   },

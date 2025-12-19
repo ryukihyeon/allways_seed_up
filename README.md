@@ -115,7 +115,7 @@ app.use(express.json());
 const cors = require('cors');
 app.use(cors());
 
-let stations = require('./dummyStations.json');
+let stations = []; // 실제 API 연결 전까지 빈 배열
 let reports = [];
 
 // 충전소 조회
@@ -142,7 +142,7 @@ app.listen(3001, () => console.log('Server running on port 3001'));
 ```
 
 ## 9) 개발 로드맵
-*   **1단계(MVP)**: ✅ 지도 표시, 충전소 더미 데이터 마커, 간단한 제보 기능, 기본 배터리 반경 원 그리기, 길찾기 기능 구현.
+*   **1단계(MVP)**: ✅ 지도 표시, 실제 API 연결 준비, 간단한 제보 기능, 기본 배터리 반경 원 그리기, 길찾기 기능 구현.
 *   **2단계(Real-time)**: 공공데이터 API 실시간 연동, 날씨 API 연동, 실제 위치(GPS) 추적, 실시간 교통 정보 반영.
 *   **3단계(AI)**: 사용자 주행 데이터 수집 및 머신러닝 모델 도입 (개인별 오차 보정), 경로 최적화 알고리즘 개선.
 *   **4단계(Expansion)**: 지자체 행정 시스템 연동(제보 시 자동 민원 접수), 커뮤니티 기능, 턴바이턴 음성 안내.

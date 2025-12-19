@@ -31,9 +31,9 @@ export async function fetchRoadBlockInfo(
   numOfRows: number = 100
 ): Promise<RoadBlockInfo[]> {
   // 안전지도 API는 CORS 문제로 브라우저에서 직접 호출 불가
-  // 백엔드 서버 구축 전까지는 목 데이터 사용
-  console.log('🚧 도로 차단 정보: 목 데이터 사용 (API CORS 제한)');
-  return getMockRoadBlocks();
+  // 백엔드 서버 구축 전까지는 빈 배열 반환
+  console.log('🚧 도로 차단 정보: API 미구현으로 빈 데이터 반환');
+  return [];
   
   /* 백엔드 서버 구축 후 사용할 코드:
   try {
@@ -51,7 +51,7 @@ export async function fetchRoadBlockInfo(
     
     if (!response.ok) {
       console.warn('도로 차단 정보 API 호출 실패:', response.status);
-      return getMockRoadBlocks();
+      return [];
     }
 
     const data = await response.json();
@@ -66,7 +66,7 @@ export async function fetchRoadBlockInfo(
     return items.map(parseRoadBlockItem).filter(Boolean);
   } catch (error) {
     console.error('도로 차단 정보 조회 실패:', error);
-    return getMockRoadBlocks();
+    return [];
   }
   */
 }
@@ -121,57 +121,7 @@ function parseSeverity(severity: string): RoadBlockInfo['severity'] {
   return 'low';
 }
 
-/**
- * 목 데이터 (데모용)
- * 실제 서비스에서는 백엔드 API를 통해 안전지도 데이터 조회
- */
-function getMockRoadBlocks(): RoadBlockInfo[] {
-  const now = new Date();
-  const oneMonthLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const twoMonthsLater = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-  
-  return [
-    {
-      id: 'mock_1',
-      title: '강남대로 도로 공사',
-      location: '서울 강남구 강남대로 396',
-      lat: 37.4979,
-      lng: 127.0276,
-      startDate: now.toISOString().split('T')[0],
-      endDate: twoMonthsLater.toISOString().split('T')[0],
-      blockType: 'construction',
-      severity: 'high',
-      description: '지하철 9호선 연장 공사로 인한 차선 통제',
-      detour: '테헤란로 우회 권장'
-    },
-    {
-      id: 'mock_2',
-      title: '여의도 한강대교 보수',
-      location: '서울 영등포구 여의도동',
-      lat: 37.5219,
-      lng: 126.9245,
-      startDate: now.toISOString().split('T')[0],
-      endDate: twoMonthsLater.toISOString().split('T')[0],
-      blockType: 'repair',
-      severity: 'medium',
-      description: '한강대교 노면 보수 공사',
-      detour: '마포대교 이용 권장'
-    },
-    {
-      id: 'mock_3',
-      title: '광화문 광장 행사',
-      location: '서울 종로구 세종대로 172',
-      lat: 37.5716,
-      lng: 126.9768,
-      startDate: now.toISOString().split('T')[0],
-      endDate: oneMonthLater.toISOString().split('T')[0],
-      blockType: 'event',
-      severity: 'low',
-      description: '문화 행사로 인한 일시적 통행 제한',
-      detour: '율곡로 우회'
-    }
-  ];
-}
+
 
 /**
  * 특정 위치 주변의 도로 차단 정보 조회

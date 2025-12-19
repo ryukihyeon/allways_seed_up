@@ -109,9 +109,9 @@ export async function fetchWheelchairProducts(): Promise<WheelchairProduct[]> {
     console.error('❌ 보조공학기기 API 오류:', error);
   }
   
-  // API 실패 시 목 데이터 반환
-  console.log('📦 API 실패. 목 데이터 사용');
-  return getMockWheelchairProducts();
+  // API 실패 시 빈 배열 반환
+  console.log('📦 API 실패. 빈 데이터 반환');
+  return [];
 }
 
 /**
@@ -174,125 +174,7 @@ function parseWheelchairProduct(item: any): WheelchairProduct | null {
   }
 }
 
-/**
- * 목 데이터 (실제 제품 기반)
- */
-function getMockWheelchairProducts(): WheelchairProduct[] {
-  return [
-    {
-      id: 'wc_001',
-      modelName: '케어라인 CL-100',
-      manufacturer: '케어라인',
-      batteryCapacityAh: 20,
-      batteryVoltage: 24,
-      weight: 45,
-      maxLoad: 100,
-      maxSpeed: 6,
-      drivingDistance: 20,
-      width: 63,
-      length: 105,
-      price: 2500000
-    },
-    {
-      id: 'wc_002',
-      modelName: '모토메드 파워체어 P200',
-      manufacturer: '모토메드',
-      batteryCapacityAh: 35,
-      batteryVoltage: 24,
-      weight: 55,
-      maxLoad: 120,
-      maxSpeed: 8,
-      drivingDistance: 30,
-      width: 65,
-      length: 110,
-      price: 3200000
-    },
-    {
-      id: 'wc_003',
-      modelName: '인바케어 TDX SP2',
-      manufacturer: '인바케어',
-      batteryCapacityAh: 50,
-      batteryVoltage: 24,
-      weight: 70,
-      maxLoad: 136,
-      maxSpeed: 10,
-      drivingDistance: 40,
-      width: 68,
-      length: 115,
-      price: 5800000
-    },
-    {
-      id: 'wc_004',
-      modelName: '퀵키 Q500',
-      manufacturer: '선라이즈메디컬',
-      batteryCapacityAh: 70,
-      batteryVoltage: 24,
-      weight: 85,
-      maxLoad: 140,
-      maxSpeed: 10,
-      drivingDistance: 50,
-      width: 70,
-      length: 120,
-      price: 7500000
-    },
-    {
-      id: 'wc_005',
-      modelName: '오토고 라이트',
-      manufacturer: '오토고',
-      batteryCapacityAh: 15,
-      batteryVoltage: 24,
-      weight: 35,
-      maxLoad: 90,
-      maxSpeed: 5,
-      drivingDistance: 15,
-      width: 60,
-      length: 100,
-      price: 1800000
-    },
-    {
-      id: 'wc_006',
-      modelName: '제이드 파워체어 J6',
-      manufacturer: '프라이드모빌리티',
-      batteryCapacityAh: 40,
-      batteryVoltage: 24,
-      weight: 60,
-      maxLoad: 125,
-      maxSpeed: 9,
-      drivingDistance: 35,
-      width: 66,
-      length: 112,
-      price: 4200000
-    },
-    {
-      id: 'wc_007',
-      modelName: '스마트체어 SC-300',
-      manufacturer: '스마트케어',
-      batteryCapacityAh: 30,
-      batteryVoltage: 24,
-      weight: 50,
-      maxLoad: 110,
-      maxSpeed: 7,
-      drivingDistance: 25,
-      width: 64,
-      length: 108,
-      price: 2900000
-    },
-    {
-      id: 'wc_008',
-      modelName: '프리덤 A08',
-      manufacturer: '프리덤',
-      batteryCapacityAh: 45,
-      batteryVoltage: 24,
-      weight: 65,
-      maxLoad: 130,
-      maxSpeed: 9,
-      drivingDistance: 38,
-      width: 67,
-      length: 113,
-      price: 4800000
-    }
-  ];
-}
+
 
 /**
  * XML 응답 파싱
