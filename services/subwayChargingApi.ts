@@ -64,6 +64,11 @@ const CHARGING_STATIONS_DATA = [
   { name: '대곡역', lineCode: '1', floor: '지하2층', location: '화장실 앞', fastChargers: 1, normalChargers: 2, tel: '053-644-7723' },
   { name: '화원역', lineCode: '1', floor: '지하1층', location: 'E/L 3호기 옆', fastChargers: 1, normalChargers: 1, tel: '053-634-5125' },
   { name: '설화명곡역', lineCode: '1', floor: '지하1층', location: 'E/L 3호기 옆', fastChargers: 1, normalChargers: 2, tel: '053-634-2674' }
+  
+  // TODO: 2호선과 3호선 충전소 데이터 추가 필요
+  // 현재 데이터에는 1호선만 포함되어 있습니다.
+  // 원본 XML 데이터에서 2호선(lineCode: '2')과 3호선(lineCode: '3') 충전소 정보를 확인하여 추가해주세요.
+  // 형식: { name: '역명', lineCode: '2' 또는 '3', floor: '층수', location: '위치', fastChargers: 숫자, normalChargers: 숫자, tel: '전화번호' }
 ];
 
 /**
@@ -108,20 +113,110 @@ async function searchStationCoordinates(stationName: string): Promise<{lat: numb
 }
 
 /**
- * XML 데이터 기반으로 충전소가 있는 역들만 좌표 검색
+ * localStorage에서 좌표 캐시 가져오기
+ */
+function getCachedCoordinates(): Map<string, {lat: number, lng: number}> {
+  try {
+    const cached = localStorage.getItem('subway_station_coordinates');
+    if (cached) {
+      const data = JSON.parse(cached);
+      // 캐시 만료 시간 체크 (7일)
+      if (data.timestamp && Date.now() - data.timestamp < 7 * 24 * 60 * 60 * 1000) {
+        return new Map(data.coordinates);
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ 좌표 캐시 읽기 실패:', e);
+  }
+  return new Map();
+}
+
+/**
+ * localStorage에 좌표 캐시 저장
+ */
+function saveCachedCoordinates(coordinates: Map<string, {lat: number, lng: number}>) {
+  try {
+    const data = {
+      timestamp: Date.now(),
+      coordinates: Array.from(coordinates.entries())
+    };
+    localStorage.setItem('subway_station_coordinates', JSON.stringify(data));
+  } catch (e) {
+    console.warn('⚠️ 좌표 캐시 저장 실패:', e);
+  }
+}
+
+/**
+ * 배치로 좌표 검색 (API 제한 고려)
+ */
+async function searchCoordinatesBatch(stationNames: string[]): Promise<Map<string, {lat: number, lng: number}>> {
+  const results = new Map<string, {lat: number, lng: number}>();
+  const BATCH_SIZE = 5; // 한 번에 5개씩 처리
+  const DELAY_BETWEEN_BATCHES = 200; // 배치 간 딜레이 (ms)
+  
+  for (let i = 0; i < stationNames.length; i += BATCH_SIZE) {
+    const batch = stationNames.slice(i, i + BATCH_SIZE);
+    console.log(`🔍 배치 ${Math.floor(i / BATCH_SIZE) + 1} 처리 중... (${batch.length}개 역)`);
+    
+    // 배치 내에서 병렬 처리
+    const batchPromises = batch.map(async (stationName) => {
+      const coords = await searchStationCoordinates(stationName);
+      if (coords) {
+        results.set(stationName, coords);
+        console.log(`✅ ${stationName}: ${coords.lat}, ${coords.lng}`);
+      } else {
+        console.warn(`⚠️ ${stationName} 좌표 검색 실패`);
+      }
+    });
+    
+    await Promise.all(batchPromises);
+    
+    // 마지막 배치가 아니면 딜레이
+    if (i + BATCH_SIZE < stationNames.length) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * XML 데이터 기반으로 충전소가 있는 역들만 좌표 검색 (최적화된 버전)
  */
 export async function fetchSubwayChargingStations(): Promise<SubwayChargingStation[]> {
   console.log('🚇 XML 데이터 기반 충전소 지하철역 검색 시작');
   console.log(`📋 XML에서 ${CHARGING_STATIONS_DATA.length}개 충전소 발견`);
   
+  // 캐시에서 좌표 가져오기
+  const cachedCoords = getCachedCoordinates();
+  console.log(`💾 캐시된 좌표: ${cachedCoords.size}개`);
+  
+  // 캐시에 없는 역들만 검색
+  const stationsToSearch = CHARGING_STATIONS_DATA.filter(
+    station => !cachedCoords.has(station.name)
+  );
+  
+  console.log(`🔍 새로 검색할 역: ${stationsToSearch.length}개`);
+  
+  // 새로 검색할 역이 있으면 API 호출
+  if (stationsToSearch.length > 0) {
+    const newCoords = await searchCoordinatesBatch(stationsToSearch.map(s => s.name));
+    
+    // 새로 검색한 좌표를 캐시에 추가
+    newCoords.forEach((coords, name) => {
+      cachedCoords.set(name, coords);
+    });
+    
+    // 캐시 저장
+    saveCachedCoordinates(cachedCoords);
+  }
+  
+  // 모든 역에 대해 Station 객체 생성
   const stations: SubwayChargingStation[] = [];
   
   for (let i = 0; i < CHARGING_STATIONS_DATA.length; i++) {
     const stationInfo = CHARGING_STATIONS_DATA[i];
-    
-    console.log(`🔍 ${stationInfo.name} 좌표 검색 중... (${i + 1}/${CHARGING_STATIONS_DATA.length})`);
-    
-    const coordinates = await searchStationCoordinates(stationInfo.name);
+    const coordinates = cachedCoords.get(stationInfo.name);
     
     if (coordinates) {
       const station: SubwayChargingStation = {
@@ -139,16 +234,21 @@ export async function fetchSubwayChargingStations(): Promise<SubwayChargingStati
       };
       
       stations.push(station);
-      console.log(`✅ ${stationInfo.name}: ${coordinates.lat}, ${coordinates.lng} (급속:${stationInfo.fastChargers}, 일반:${stationInfo.normalChargers})`);
     } else {
-      console.warn(`⚠️ ${stationInfo.name} 좌표 검색 실패`);
+      // 좌표를 찾지 못한 경우에도 역 정보는 포함 (나중에 재시도 가능)
+      console.warn(`⚠️ ${stationInfo.name} 좌표를 찾을 수 없습니다. API 재시도가 필요합니다.`);
+      // 좌표가 없어도 역 정보는 포함시키지 않음 (정확한 위치가 필요하므로)
     }
-    
-    // API 호출 제한을 위한 딜레이 (100ms)
-    await new Promise(resolve => setTimeout(resolve, 100));
   }
   
   console.log(`🎯 총 ${stations.length}개 충전소 지하철역 좌표 검색 완료`);
+  if (stations.length > 0) {
+    console.log(`📊 역 목록:`, stations.map(s => s.stationName).join(', '));
+  } else {
+    console.error(`❌ 지하철역 좌표를 찾을 수 없습니다. localStorage 캐시를 삭제하고 다시 시도해주세요.`);
+    console.log(`💡 해결 방법: 브라우저 콘솔에서 localStorage.removeItem('subway_station_coordinates') 실행 후 새로고침`);
+  }
+  
   return stations;
 }
 

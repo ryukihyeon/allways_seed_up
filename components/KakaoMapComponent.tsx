@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { Station, Report, RoadBlock } from '../types';
 
 declare global {
@@ -48,6 +48,11 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
   const userMarkerRef = useRef<any>(null);
   const polylineRef = useRef<any>(null);
   const destMarkerRef = useRef<any>(null);
+  const stationMarkersMap = useRef<Map<string, any>>(new Map());
+  const reportMarkersMap = useRef<Map<string, any>>(new Map());
+  const roadBlockMarkersMap = useRef<Map<string, any>>(new Map());
+  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentBoundsRef = useRef<any>(null);
 
   // 지도 초기화
   useEffect(() => {
@@ -85,6 +90,21 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
         window.kakao.maps.event.addListener(mapRef.current, 'dragstart', () => {
           onDragStart();
         });
+
+        // 확대/축소 및 이동 이벤트 디바운싱
+        const handleBoundsChanged = () => {
+          if (zoomTimeoutRef.current) {
+            clearTimeout(zoomTimeoutRef.current);
+          }
+          zoomTimeoutRef.current = setTimeout(() => {
+            if (mapRef.current) {
+              currentBoundsRef.current = mapRef.current.getBounds();
+            }
+          }, 150);
+        };
+
+        window.kakao.maps.event.addListener(mapRef.current, 'zoom_changed', handleBoundsChanged);
+        window.kakao.maps.event.addListener(mapRef.current, 'dragend', handleBoundsChanged);
 
         console.log('✅ 카카오맵 초기화 완료');
       } catch (error) {
@@ -134,17 +154,47 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     }
   }, [userLocation, isFollowingUser]);
 
-  // 충전소 마커
+  // 뷰포트 내 마커 필터링 헬퍼
+  const isInViewport = useCallback((lat: number, lng: number): boolean => {
+    if (!mapRef.current || !currentBoundsRef.current) return true;
+    return currentBoundsRef.current.contain(new window.kakao.maps.LatLng(lat, lng));
+  }, []);
+
+  // 충전소 마커 (최적화된 버전)
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // 기존 마커 제거
-    markersRef.current.forEach(marker => marker.setMap(null));
-    markersRef.current = [];
+    if (!showStations) {
+      // 모든 마커 제거
+      stationMarkersMap.current.forEach(marker => marker.setMap(null));
+      stationMarkersMap.current.clear();
+      return;
+    }
 
-    if (!showStations) return;
+    // 현재 뷰포트 가져오기
+    if (mapRef.current) {
+      currentBoundsRef.current = mapRef.current.getBounds();
+    }
 
-    stations.forEach(station => {
+    // 뷰포트 내의 충전소만 필터링
+    const visibleStations = stations.filter(station => 
+      !currentBoundsRef.current || isInViewport(station.lat, station.lng)
+    );
+
+    // 제거된 마커 삭제
+    stationMarkersMap.current.forEach((marker, key) => {
+      if (!stations.find(s => s.id === key)) {
+        marker.setMap(null);
+        stationMarkersMap.current.delete(key);
+      }
+    });
+
+    visibleStations.forEach(station => {
+      const key = station.id;
+      
+      // 이미 존재하는 마커는 건너뛰기
+      if (stationMarkersMap.current.has(key)) return;
+
       const position = new window.kakao.maps.LatLng(station.lat, station.lng);
       
       // 지하철 충전소와 일반 충전소 구분
@@ -180,8 +230,6 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       const handleMarkerClick = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('🖱️ 마커 클릭됨:', station.name, 'type:', station.type);
-        console.log('🔍 전체 station 객체:', station);
         onStationClick(station);
       };
       
@@ -197,15 +245,37 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       });
 
       marker.setMap(mapRef.current);
-      markersRef.current.push(marker);
+      stationMarkersMap.current.set(key, marker);
     });
-  }, [stations, showStations, onStationClick]);
+  }, [stations, showStations, onStationClick, isInViewport]);
 
-  // 도로 차단 마커
+  // 도로 차단 마커 (최적화된 버전)
   useEffect(() => {
     if (!mapRef.current) return;
 
-    roadBlocks.forEach(block => {
+    // 현재 뷰포트 가져오기
+    if (mapRef.current) {
+      currentBoundsRef.current = mapRef.current.getBounds();
+    }
+
+    // 뷰포트 내의 도로 차단만 필터링
+    const visibleBlocks = roadBlocks.filter(block => 
+      !currentBoundsRef.current || isInViewport(block.lat, block.lng)
+    );
+
+    // 제거된 마커 삭제
+    roadBlockMarkersMap.current.forEach((marker, key) => {
+      if (!roadBlocks.find(b => `${b.lat}-${b.lng}` === key)) {
+        marker.setMap(null);
+        roadBlockMarkersMap.current.delete(key);
+      }
+    });
+
+    visibleBlocks.forEach(block => {
+      const key = `${block.lat}-${block.lng}`;
+      
+      // 이미 존재하는 마커는 건너뛰기
+      if (roadBlockMarkersMap.current.has(key)) return;
       const position = new window.kakao.maps.LatLng(block.lat, block.lng);
       
       const severityColors: any = {
@@ -287,15 +357,44 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       });
 
       marker.setMap(mapRef.current);
-      markersRef.current.push(marker);
+      roadBlockMarkersMap.current.set(key, marker);
     });
-  }, [roadBlocks]);
+  }, [roadBlocks, isInViewport]);
 
-  // 제보 마커
+  // 제보 마커 (최적화된 버전)
   useEffect(() => {
-    if (!mapRef.current || !showReports) return;
+    if (!mapRef.current) return;
 
-    reports.forEach(report => {
+    if (!showReports) {
+      // 모든 마커 제거
+      reportMarkersMap.current.forEach(marker => marker.setMap(null));
+      reportMarkersMap.current.clear();
+      return;
+    }
+
+    // 현재 뷰포트 가져오기
+    if (mapRef.current) {
+      currentBoundsRef.current = mapRef.current.getBounds();
+    }
+
+    // 뷰포트 내의 제보만 필터링
+    const visibleReports = reports.filter(report => 
+      !currentBoundsRef.current || isInViewport(report.lat, report.lng)
+    );
+
+    // 제거된 마커 삭제
+    reportMarkersMap.current.forEach((marker, key) => {
+      if (!reports.find(r => r.id === key)) {
+        marker.setMap(null);
+        reportMarkersMap.current.delete(key);
+      }
+    });
+
+    visibleReports.forEach(report => {
+      const key = report.id;
+      
+      // 이미 존재하는 마커는 건너뛰기
+      if (reportMarkersMap.current.has(key)) return;
       const position = new window.kakao.maps.LatLng(report.lat, report.lng);
       
       const colors: any = {
@@ -333,9 +432,9 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       });
 
       marker.setMap(mapRef.current);
-      markersRef.current.push(marker);
+      reportMarkersMap.current.set(key, marker);
     });
-  }, [reports, showReports]);
+  }, [reports, showReports, isInViewport]);
 
   // 배터리 범위 원
   useEffect(() => {

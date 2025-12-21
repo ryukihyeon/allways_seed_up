@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { KakaoMapComponent } from './components/KakaoMapComponent';
 import { ControlPanel } from './components/ControlPanel';
 import { StationModal } from './components/StationModal';
@@ -256,9 +256,9 @@ const App: React.FC = () => {
     }
   }, [userLocation, stations, batteryLevel]);
 
-  // --- Handlers ---
+  // --- Handlers --- (useCallback으로 메모이제이션)
 
-  const handleMapClick = async (lat: number, lng: number) => {
+  const handleMapClick = useCallback(async (lat: number, lng: number) => {
     // Hide other modals
     setSelectedStation(null);
     setSelectedSubwayStation(null);
@@ -286,10 +286,10 @@ const App: React.FC = () => {
       const location = await api.reverseGeocode(lat, lng);
       setSelectedLocation(location);
     }
-  };
+  }, [userLocation]);
 
   // 충전소 클릭 핸들러 (지하철 충전소와 일반 충전소 구분)
-  const handleStationClick = async (station: Station) => {
+  const handleStationClick = useCallback(async (station: Station) => {
     console.log('🚇 App.tsx - 충전소 클릭됨:', station);
     console.log('🔍 App.tsx - station.type:', station.type);
     
@@ -329,10 +329,10 @@ const App: React.FC = () => {
       setSelectedStation(station);
       setSelectedSubwayStation(null);
     }
-  };
+  }, []);
 
   // 위치 새로고침 함수
-  const refreshUserLocation = async () => {
+  const refreshUserLocation = useCallback(async () => {
     console.log('🔄 사용자 위치 새로고침 시작...');
     
     if (navigator.geolocation) {
@@ -363,9 +363,9 @@ const App: React.FC = () => {
     } else {
       alert('이 브라우저는 위치 서비스를 지원하지 않습니다.');
     }
-  };
+  }, []);
 
-  const handleStationNavigate = async (lat: number, lng: number) => {
+  const handleStationNavigate = useCallback(async (lat: number, lng: number) => {
     if (!userLocation) {
       alert('현재 위치를 확인할 수 없습니다.');
       return;
@@ -385,30 +385,30 @@ const App: React.FC = () => {
     if (walkRoute) {
       setSelectedRoute(walkRoute);
     }
-  };
+  }, [userLocation]);
 
-  const handleReportCurrentLocation = () => {
+  const handleReportCurrentLocation = useCallback(() => {
       if (userLocation) {
           setNewReportCoords({ lat: userLocation.lat, lng: userLocation.lng });
           setReportDialogOpen(true);
       } else {
           alert("현재 위치를 찾을 수 없습니다. GPS 권한을 확인해주세요.");
       }
-  };
+  }, [userLocation]);
 
-  const handleDragStart = () => {
+  const handleDragStart = useCallback(() => {
     setIsFollowingUser(false);
-  };
+  }, []);
 
-  const handleCenterLocation = () => {
+  const handleCenterLocation = useCallback(() => {
     if (userLocation) {
       setIsFollowingUser(true);
     } else {
         alert("위치 정보를 가져오는 중입니다...");
     }
-  };
+  }, [userLocation]);
 
-  const handleSubmitReport = async (type: string, desc: string, severity: 'CAUTION' | 'WARNING' | 'DANGER', image: string | undefined) => {
+  const handleSubmitReport = useCallback(async (type: string, desc: string, severity: 'CAUTION' | 'WARNING' | 'DANGER', image: string | undefined) => {
     if (!newReportCoords) return;
     const reportType = type as Report['type'];
     const newReport = await api.postReport({
@@ -420,9 +420,9 @@ const App: React.FC = () => {
       imageUrl: image
     });
     setReports(prev => [...prev, newReport]);
-  };
+  }, []);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = useCallback(async (query: string) => {
     setIsSearching(true);
     setSelectedRoute(null);
     // 검색 결과 첫 번째 항목으로 경로 계산
@@ -435,9 +435,9 @@ const App: React.FC = () => {
         setSearchResults(routes);
     }
     setIsSearching(false);
-  };
+  }, [userLocation]);
 
-  const handleActionSheetRoute = async () => {
+  const handleActionSheetRoute = useCallback(async () => {
       if (selectedLocation && userLocation) {
           setSelectedLocation(null);
           setSelectedRoute(null);
@@ -447,9 +447,9 @@ const App: React.FC = () => {
       } else {
           alert("내 위치가 확인되지 않아 경로를 찾을 수 없습니다.");
       }
-  };
+  }, [selectedLocation, userLocation]);
 
-  const handleSaveLocation = (name: string, lat: number, lng: number) => {
+  const handleSaveLocation = useCallback((name: string, lat: number, lng: number) => {
       const savedItem = { name, lat, lng, savedAt: new Date().toISOString() };
       // Save to localStorage for MVP
       const savedList = JSON.parse(localStorage.getItem('wheely_saved_places') || '[]');
@@ -457,7 +457,7 @@ const App: React.FC = () => {
       localStorage.setItem('wheely_saved_places', JSON.stringify(savedList));
       alert(`[저장됨] ${name}\n위치 목록에 추가되었습니다.`);
       console.log('Saved Location:', savedItem);
-  };
+  }, []);
 
   return (
     <div className="relative w-full h-screen bg-gray-50 overflow-hidden font-sans">
