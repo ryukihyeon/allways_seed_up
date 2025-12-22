@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>allway's - 전동휠체어 안전 지도</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 카카오맵 JavaScript API -->
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=84bd6a979b95e1ca84addd77b86d847e"></script>
+    <!-- 카카오맵 SDK -->
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=84bd6a979b95e1ca84addd77b86d847e&libraries=services,clusterer,drawing"></script>
     <style>
       body, html, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
       /* Custom Marker Styles */
@@ -89,6 +89,6 @@
 </head>
 <body>
     <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

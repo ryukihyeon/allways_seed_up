@@ -11,12 +11,15 @@ import { api } from './services/mockApi';
 import { Station, Report, UserProfile, EnvironmentData, LocationInfo, RouteOption, WeatherData, RoadBlock } from './types';
 import { INITIAL_CENTER, WHEELCHAIR_MODELS } from './constants';
 import { fetchRoadBlockInfo, filterActiveBlocks, filterRoadBlocksByLocation } from './services/roadBlockApi';
+import { fetchDaeguMetroChargers } from './services/daeguMetroApi';
+import { fetchDaeguElevators, type ElevatorInfo } from './services/daeguElevatorApi';
 
 const App: React.FC = () => {
   // --- State ---
   const [stations, setStations] = useState<Station[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [roadBlocks, setRoadBlocks] = useState<RoadBlock[]>([]);
+  const [elevators, setElevators] = useState<ElevatorInfo[]>([]);
   
   // UI Toggles
   const [showStations, setShowStations] = useState(true);
@@ -65,15 +68,20 @@ const App: React.FC = () => {
   // --- Effects ---
   useEffect(() => {
     const initData = async () => {
-      const [stationData, reportData, weatherData, roadBlockData] = await Promise.all([
+      const [stationData, reportData, weatherData, roadBlockData, daeguChargers, daeguElevators] = await Promise.all([
         api.getStations(),
         api.getReports(),
         api.getWeather(),
-        fetchRoadBlockInfo()
+        fetchRoadBlockInfo(),
+        fetchDaeguMetroChargers(),
+        fetchDaeguElevators()
       ]);
-      setStations(stationData);
+      
+      // 대구도시철도 충전소만 사용 (실제 API 데이터)
+      setStations(daeguChargers);
       setReports(reportData);
       setWeather(weatherData);
+      setElevators(daeguElevators);
       
       // 현재 진행 중인 도로 차단만 필터링
       const activeBlocks = filterActiveBlocks(roadBlockData);
@@ -86,7 +94,8 @@ const App: React.FC = () => {
       }));
 
       console.log('📊 데이터 로드 완료:', {
-        충전소: stationData.length,
+        '대구1호선 충전설비': daeguChargers.length,
+        '대구 승강기': daeguElevators.length,
         제보: reportData.length,
         도로차단: activeBlocks.length
       });
@@ -108,12 +117,13 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
+  // 현재 위치 초기화 (GPS/IP 기반, 실패 시 기본 위치)
   useEffect(() => {
     const initLocation = async () => {
       console.log('📍 위치 초기화 시작...');
       
       // 먼저 기본 위치를 설정 (대구 중앙로역)
-      const defaultLocation = { lat: 35.8694, lng: 128.6061 };
+      const defaultLocation = INITIAL_CENTER;
       setUserLocation(defaultLocation);
       console.log('📍 기본 위치 설정 완료 (대구 중앙로역)');
       
@@ -467,6 +477,7 @@ const App: React.FC = () => {
         stations={stations}
         reports={reports}
         roadBlocks={roadBlocks}
+        elevators={elevators}
         showStations={showStations}
         showReports={showReports}
         batteryRange={predictedRange}
