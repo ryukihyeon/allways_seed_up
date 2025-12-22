@@ -13,6 +13,7 @@ import { INITIAL_CENTER, WHEELCHAIR_MODELS } from './constants';
 import { fetchRoadBlockInfo, filterActiveBlocks, filterRoadBlocksByLocation } from './services/roadBlockApi';
 import { fetchDaeguMetroChargers } from './services/daeguMetroApi';
 import { fetchDaeguElevators, type ElevatorInfo } from './services/daeguElevatorApi';
+import { Sidebar } from './components/Sidebar';
 
 const App: React.FC = () => {
   // --- State ---
@@ -20,22 +21,37 @@ const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [roadBlocks, setRoadBlocks] = useState<RoadBlock[]>([]);
   const [elevators, setElevators] = useState<ElevatorInfo[]>([]);
-  
+
   // UI Toggles
   const [showStations, setShowStations] = useState(true);
   const [showReports, setShowReports] = useState(true);
+  const [showElevators, setShowElevators] = useState(true);
+  const [visibleSeverities, setVisibleSeverities] = useState<Set<string>>(new Set(['CAUTION', 'WARNING', 'DANGER']));
+
+  const handleToggleSeverity = (severity: string) => {
+    setVisibleSeverities(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(severity)) {
+        newSet.delete(severity);
+      } else {
+        newSet.add(severity);
+      }
+      return newSet;
+    });
+  };
+
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
-  
+
   // 지하철 충전소 관련 상태 (기존 코드와 독립적)
   const [selectedSubwayStation, setSelectedSubwayStation] = useState<Station | null>(null);
-  
+
   // Location & Following Logic
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(true);
 
   // Battery & Range Logic
   const [isBatteryDrawerOpen, setBatteryDrawerOpen] = useState(false);
-  
+
   const [batteryLevel, setBatteryLevel] = useState<number>(80);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     modelName: '모토메드 파워체어 P200',
@@ -56,14 +72,14 @@ const App: React.FC = () => {
 
   // Reporting Logic
   const [isReportDialogOpen, setReportDialogOpen] = useState(false);
-  const [newReportCoords, setNewReportCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [newReportCoords, setNewReportCoords] = useState<{ lat: number, lng: number } | null>(null);
 
   // Search & Routing Logic
   const [selectedLocation, setSelectedLocation] = useState<LocationInfo | null>(null);
   const [searchResults, setSearchResults] = useState<RouteOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
-  const [routeDestination, setRouteDestination] = useState<{lat: number, lng: number} | null>(null);
+  const [routeDestination, setRouteDestination] = useState<{ lat: number, lng: number } | null>(null);
 
   // --- Effects ---
   useEffect(() => {
@@ -76,21 +92,21 @@ const App: React.FC = () => {
         fetchDaeguMetroChargers(),
         fetchDaeguElevators()
       ]);
-      
+
       // 대구도시철도 충전소만 사용 (실제 API 데이터)
       setStations(daeguChargers);
       setReports(reportData);
       setWeather(weatherData);
       setElevators(daeguElevators);
-      
+
       // 현재 진행 중인 도로 차단만 필터링
       const activeBlocks = filterActiveBlocks(roadBlockData);
       setRoadBlocks(activeBlocks);
-      
-      setEnvironment(prev => ({ 
-        ...prev, 
+
+      setEnvironment(prev => ({
+        ...prev,
         temp: weatherData.temp,
-        windSpeed: weatherData.windSpeed 
+        windSpeed: weatherData.windSpeed
       }));
 
       console.log('📊 데이터 로드 완료:', {
@@ -106,13 +122,13 @@ const App: React.FC = () => {
   // Weather Auto-Refresh (every 5 minutes)
   useEffect(() => {
     const intervalId = setInterval(async () => {
-        const newWeather = await api.getWeather();
-        setWeather(newWeather);
-        setEnvironment(prev => ({ 
-            ...prev, 
-            temp: newWeather.temp,
-            windSpeed: newWeather.windSpeed 
-        }));
+      const newWeather = await api.getWeather();
+      setWeather(newWeather);
+      setEnvironment(prev => ({
+        ...prev,
+        temp: newWeather.temp,
+        windSpeed: newWeather.windSpeed
+      }));
     }, 5 * 60 * 1000); // 5 min
     return () => clearInterval(intervalId);
   }, []);
@@ -121,17 +137,17 @@ const App: React.FC = () => {
   useEffect(() => {
     const initLocation = async () => {
       console.log('📍 위치 초기화 시작...');
-      
+
       // 먼저 기본 위치를 설정 (대구 중앙로역)
       const defaultLocation = INITIAL_CENTER;
       setUserLocation(defaultLocation);
       console.log('📍 기본 위치 설정 완료 (대구 중앙로역)');
-      
+
       try {
         // GPS 위치 조회 시도 (비동기)
         if (navigator.geolocation) {
           console.log('🛰️ GPS 위치 조회 시도...');
-          
+
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               const { latitude, longitude } = position.coords;
@@ -148,7 +164,7 @@ const App: React.FC = () => {
             },
             (error) => {
               console.warn('❌ GPS 위치 조회 실패:', error.message);
-              
+
               // IP 기반 위치 시도
               fetch('https://ipapi.co/json/')
                 .then(response => response.json())
@@ -167,7 +183,7 @@ const App: React.FC = () => {
                   console.log('📍 기본 위치 유지');
                 });
             },
-            { 
+            {
               enableHighAccuracy: false, // 정확도보다 속도 우선
               timeout: 5000, // 5초 타임아웃
               maximumAge: 600000 // 10분간 캐시 사용
@@ -222,7 +238,7 @@ const App: React.FC = () => {
         .filter(station => station.isAvailable)
         .map(station => {
           const distance = Math.sqrt(
-            Math.pow(station.lat - userLocation.lat, 2) + 
+            Math.pow(station.lat - userLocation.lat, 2) +
             Math.pow(station.lng - userLocation.lng, 2)
           ) * 111000; // 미터 변환
           return { ...station, distance };
@@ -234,7 +250,7 @@ const App: React.FC = () => {
         const nearest = availableStations[0];
         if (nearest.distance < 2000) { // 2km 이내
           console.log(`🔋 배터리 부족 경고! 가장 가까운 충전소: ${nearest.name} (${Math.round(nearest.distance)}m)`);
-          
+
           // 10% 이하일 때는 자동으로 길찾기 제안
           if (batteryLevel <= 10) {
             const shouldNavigate = window.confirm(
@@ -244,12 +260,12 @@ const App: React.FC = () => {
               `📏 거리: ${Math.round(nearest.distance)}m\n\n` +
               `확인을 누르면 길찾기를 시작합니다.`
             );
-            
+
             if (shouldNavigate) {
               // 가까운 충전소로 길찾기 시작
               setSelectedRoute(null);
               setRouteDestination({ lat: nearest.lat, lng: nearest.lng });
-              
+
               api.calculateRoutes(userLocation, { lat: nearest.lat, lng: nearest.lng })
                 .then(routes => {
                   setSearchResults(routes);
@@ -272,19 +288,19 @@ const App: React.FC = () => {
     // Hide other modals
     setSelectedStation(null);
     setSelectedSubwayStation(null);
-    
+
     // 사용자 위치가 있으면 바로 길찾기 시작
     if (userLocation) {
       setSelectedRoute(null);
       setRouteDestination({ lat, lng });
-      
+
       // 역지오코딩으로 주소 가져오기
       const location = await api.reverseGeocode(lat, lng);
-      
+
       // 경로 계산
       const routes = await api.calculateRoutes(userLocation, { lat, lng });
       setSearchResults(routes);
-      
+
       // 첫 번째 경로를 자동 선택 (도보 우선)
       const walkRoute = routes.find(r => r.mode === 'WALK') || routes[0];
       if (walkRoute) {
@@ -302,18 +318,18 @@ const App: React.FC = () => {
   const handleStationClick = useCallback(async (station: Station) => {
     console.log('🚇 App.tsx - 충전소 클릭됨:', station);
     console.log('🔍 App.tsx - station.type:', station.type);
-    
+
     // 다른 패널들 닫기
     setSelectedLocation(null);
-    
+
     if (station.type === 'SUBWAY') {
       console.log('✅ App.tsx - 지하철 충전소 클릭, 실시간 충전기 정보 조회 시작:', station.name);
-      
+
       // 실시간으로 충전기 정보 조회
       try {
         const { fetchChargingInfoByStation } = await import('./services/subwayChargingApi');
         const chargingInfo = await fetchChargingInfoByStation(station.name, station.lineCode || '1');
-        
+
         // 충전기 정보를 station 객체에 추가
         const updatedStation = {
           ...station,
@@ -322,11 +338,11 @@ const App: React.FC = () => {
           normalChargerCount: chargingInfo?.normalChargerCount || 0,
           hasCharger: chargingInfo?.hasCharger || false
         };
-        
+
         console.log('✅ App.tsx - 충전기 정보 조회 완료:', chargingInfo);
         setSelectedSubwayStation(updatedStation);
         setSelectedStation(null);
-        
+
       } catch (error) {
         console.error('❌ App.tsx - 충전기 정보 조회 실패:', error);
         // 에러 시에도 기본 정보로 패널 표시
@@ -344,14 +360,14 @@ const App: React.FC = () => {
   // 위치 새로고침 함수
   const refreshUserLocation = useCallback(async () => {
     console.log('🔄 사용자 위치 새로고침 시작...');
-    
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
           console.log(`✅ 위치 새로고침 성공: ${latitude}, ${longitude}`);
           setUserLocation({ lat: latitude, lng: longitude });
-          
+
           // 경사도 데이터도 업데이트
           try {
             const slope = await api.getSlopeByLocation(latitude, longitude);
@@ -364,9 +380,9 @@ const App: React.FC = () => {
           console.warn('❌ 위치 새로고침 실패:', error.message);
           alert('위치 정보를 가져올 수 없습니다. GPS가 켜져 있는지 확인해주세요.');
         },
-        { 
-          enableHighAccuracy: true, 
-          timeout: 10000, 
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
           maximumAge: 0 // 캐시 사용 안함
         }
       );
@@ -382,14 +398,14 @@ const App: React.FC = () => {
     }
 
     console.log('🧭 충전소로 길찾기:', { from: userLocation, to: { lat, lng } });
-    
+
     setSelectedRoute(null);
     setRouteDestination({ lat, lng });
-    
+
     // 경로 계산
     const routes = await api.calculateRoutes(userLocation, { lat, lng });
     setSearchResults(routes);
-    
+
     // 첫 번째 경로를 자동 선택 (도보 우선)
     const walkRoute = routes.find(r => r.mode === 'WALK') || routes[0];
     if (walkRoute) {
@@ -398,12 +414,12 @@ const App: React.FC = () => {
   }, [userLocation]);
 
   const handleReportCurrentLocation = useCallback(() => {
-      if (userLocation) {
-          setNewReportCoords({ lat: userLocation.lat, lng: userLocation.lng });
-          setReportDialogOpen(true);
-      } else {
-          alert("현재 위치를 찾을 수 없습니다. GPS 권한을 확인해주세요.");
-      }
+    if (userLocation) {
+      setNewReportCoords({ lat: userLocation.lat, lng: userLocation.lng });
+      setReportDialogOpen(true);
+    } else {
+      alert("현재 위치를 찾을 수 없습니다. GPS 권한을 확인해주세요.");
+    }
   }, [userLocation]);
 
   const handleDragStart = useCallback(() => {
@@ -414,7 +430,7 @@ const App: React.FC = () => {
     if (userLocation) {
       setIsFollowingUser(true);
     } else {
-        alert("위치 정보를 가져오는 중입니다...");
+      alert("위치 정보를 가져오는 중입니다...");
     }
   }, [userLocation]);
 
@@ -438,40 +454,49 @@ const App: React.FC = () => {
     // 검색 결과 첫 번째 항목으로 경로 계산
     const locations = await api.searchLocations(query);
     if (locations.length > 0 && userLocation) {
-        // Just showing the first match route for MVP
-        const dest = locations[0];
-        setRouteDestination({ lat: dest.lat, lng: dest.lng });
-        const routes = await api.calculateRoutes(userLocation, { lat: dest.lat, lng: dest.lng });
-        setSearchResults(routes);
+      // Just showing the first match route for MVP
+      const dest = locations[0];
+      setRouteDestination({ lat: dest.lat, lng: dest.lng });
+      const routes = await api.calculateRoutes(userLocation, { lat: dest.lat, lng: dest.lng });
+      setSearchResults(routes);
     }
     setIsSearching(false);
   }, [userLocation]);
 
   const handleActionSheetRoute = useCallback(async () => {
-      if (selectedLocation && userLocation) {
-          setSelectedLocation(null);
-          setSelectedRoute(null);
-          setRouteDestination({ lat: selectedLocation.lat, lng: selectedLocation.lng });
-          const routes = await api.calculateRoutes(userLocation, { lat: selectedLocation.lat, lng: selectedLocation.lng });
-          setSearchResults(routes);
-      } else {
-          alert("내 위치가 확인되지 않아 경로를 찾을 수 없습니다.");
-      }
+    if (selectedLocation && userLocation) {
+      setSelectedLocation(null);
+      setSelectedRoute(null);
+      setRouteDestination({ lat: selectedLocation.lat, lng: selectedLocation.lng });
+      const routes = await api.calculateRoutes(userLocation, { lat: selectedLocation.lat, lng: selectedLocation.lng });
+      setSearchResults(routes);
+    } else {
+      alert("내 위치가 확인되지 않아 경로를 찾을 수 없습니다.");
+    }
   }, [selectedLocation, userLocation]);
 
   const handleSaveLocation = useCallback((name: string, lat: number, lng: number) => {
-      const savedItem = { name, lat, lng, savedAt: new Date().toISOString() };
-      // Save to localStorage for MVP
-      const savedList = JSON.parse(localStorage.getItem('wheely_saved_places') || '[]');
-      savedList.push(savedItem);
-      localStorage.setItem('wheely_saved_places', JSON.stringify(savedList));
-      alert(`[저장됨] ${name}\n위치 목록에 추가되었습니다.`);
-      console.log('Saved Location:', savedItem);
+    const savedItem = { name, lat, lng, savedAt: new Date().toISOString() };
+    // Save to localStorage for MVP
+    const savedList = JSON.parse(localStorage.getItem('wheely_saved_places') || '[]');
+    savedList.push(savedItem);
+    localStorage.setItem('wheely_saved_places', JSON.stringify(savedList));
+    alert(`[저장됨] ${name}\n위치 목록에 추가되었습니다.`);
+    console.log('Saved Location:', savedItem);
   }, []);
 
   return (
     <div className="relative w-full h-screen bg-gray-50 overflow-hidden font-sans">
-      
+
+      <Sidebar
+        showElevators={showElevators}
+        setShowElevators={setShowElevators}
+        showStations={showStations}
+        setShowStations={setShowStations}
+        visibleSeverities={visibleSeverities}
+        toggleSeverity={handleToggleSeverity}
+      />
+
       <KakaoMapComponent
         center={INITIAL_CENTER}
         stations={stations}
@@ -479,7 +504,9 @@ const App: React.FC = () => {
         roadBlocks={roadBlocks}
         elevators={elevators}
         showStations={showStations}
+        showElevators={showElevators}
         showReports={showReports}
+        visibleSeverities={visibleSeverities}
         batteryRange={predictedRange}
         onMapClick={handleMapClick}
         onStationClick={handleStationClick}
@@ -491,18 +518,18 @@ const App: React.FC = () => {
         routeDestination={routeDestination}
       />
 
-      <SearchPanel 
-          onSearch={handleSearch}
-          searchResults={searchResults}
-          isSearching={isSearching}
-          onClear={() => {
-            setSearchResults([]);
-            setSelectedRoute(null);
-            setRouteDestination(null);
-          }}
-          weather={weather}
-          onSelectRoute={setSelectedRoute}
-          selectedRoute={selectedRoute}
+      <SearchPanel
+        onSearch={handleSearch}
+        searchResults={searchResults}
+        isSearching={isSearching}
+        onClear={() => {
+          setSearchResults([]);
+          setSelectedRoute(null);
+          setRouteDestination(null);
+        }}
+        weather={weather}
+        onSelectRoute={setSelectedRoute}
+        selectedRoute={selectedRoute}
       />
 
       <ControlPanel
@@ -531,16 +558,16 @@ const App: React.FC = () => {
         onNavigate={handleStationNavigate}
       />
 
-      <LocationActionSheet 
+      <LocationActionSheet
         location={selectedLocation}
         onClose={() => setSelectedLocation(null)}
         onRoute={handleActionSheetRoute}
         onReport={() => {
-            if (selectedLocation) {
-                setNewReportCoords({ lat: selectedLocation.lat, lng: selectedLocation.lng });
-                setReportDialogOpen(true);
-                setSelectedLocation(null);
-            }
+          if (selectedLocation) {
+            setNewReportCoords({ lat: selectedLocation.lat, lng: selectedLocation.lng });
+            setReportDialogOpen(true);
+            setSelectedLocation(null);
+          }
         }}
       />
 
@@ -556,11 +583,11 @@ const App: React.FC = () => {
 
       {newReportCoords && (
         <ReportDialog
-            isOpen={isReportDialogOpen}
-            onClose={() => { setReportDialogOpen(false); setNewReportCoords(null); }}
-            onSubmit={handleSubmitReport}
-            lat={newReportCoords.lat}
-            lng={newReportCoords.lng}
+          isOpen={isReportDialogOpen}
+          onClose={() => { setReportDialogOpen(false); setNewReportCoords(null); }}
+          onSubmit={handleSubmitReport}
+          lat={newReportCoords.lat}
+          lng={newReportCoords.lng}
         />
       )}
     </div>

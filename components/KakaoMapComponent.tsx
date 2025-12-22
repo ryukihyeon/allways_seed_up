@@ -25,15 +25,17 @@ interface MapProps {
   onDragStart: () => void;
   selectedRoute: any | null;
   routeDestination: { lat: number, lng: number } | null;
+  showElevators: boolean;
+  visibleSeverities: Set<string>;
 }
 
-export const KakaoMapComponent: React.FC<MapProps> = ({ 
-  stations, 
+export const KakaoMapComponent: React.FC<MapProps> = ({
+  stations,
   reports,
   roadBlocks,
   elevators,
-  showStations, 
-  showReports, 
+  showStations,
+  showReports,
   batteryRange,
   onMapClick,
   onStationClick,
@@ -43,7 +45,9 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
   isFollowingUser,
   onDragStart,
   selectedRoute,
-  routeDestination
+  routeDestination,
+  showElevators,
+  visibleSeverities
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -58,68 +62,103 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
   const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentBoundsRef = useRef<any>(null);
 
+  // 좌표 유효성 검사 헬퍼 (더 엄격하게)
+  const isValidCoordinate = (lat: any, lng: any) => {
+    const validLat = typeof lat === 'number' ? lat : parseFloat(lat);
+    const validLng = typeof lng === 'number' ? lng : parseFloat(lng);
+
+    return Number.isFinite(validLat) && Number.isFinite(validLng) &&
+      !isNaN(validLat) && !isNaN(validLng) &&
+      validLat !== 0 && validLng !== 0 &&
+      Math.abs(validLat) <= 90 && Math.abs(validLng) <= 180; // 위경도 범위 체크
+  };
+
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // 지도 초기화
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapRef.current) return; // 이미 초기화됨
 
-    // 카카오맵 API 로드 대기
     const initMap = () => {
-      if (!window.kakao || !window.kakao.maps) {
-        console.log('⏳ 카카오맵 API 로딩 중...');
-        setTimeout(initMap, 200);
+      // 카카오맵 API가 로드되었는지 확인 - window.kakao가 있고 maps도 있어야 함
+      if (typeof window === 'undefined' || !window.kakao || !window.kakao.maps || !window.kakao.maps.LatLng) {
+        // 아직 로드되지 않았다면 조금 더 대기 (최대 10초)
+        const retryCount = (window as any).kakaoMapRetryCount || 0;
+        if (retryCount < 50) {
+          (window as any).kakaoMapRetryCount = retryCount + 1;
+          initTimeoutRef.current = setTimeout(initMap, 200);
+        } else {
+          console.error('❌ 카카오맵 API 로드 시간 초과');
+        }
         return;
       }
 
-      console.log('🗺️ 카카오맵 초기화 시작');
+      // v3 스크립트가 로드된 후 maps 라이브러리 초기화 대기
+      window.kakao.maps.load(() => {
+        console.log('🗺️ 카카오맵 초기화 시작');
 
-      const container = mapContainerRef.current;
-      if (!container) return;
+        const container = mapContainerRef.current;
+        if (!container) return;
 
-      const options = {
-        center: new window.kakao.maps.LatLng(center.lat, center.lng),
-        level: 3
-      };
+        // 중심 좌표 유효성 검사
+        if (!isValidCoordinate(center.lat, center.lng)) {
+          console.error('❌ 잘못된 중심 좌표:', center);
+          return;
+        }
 
-      try {
-        mapRef.current = new window.kakao.maps.Map(container, options);
-
-        // 지도 클릭 이벤트
-        window.kakao.maps.event.addListener(mapRef.current, 'click', (mouseEvent: any) => {
-          const latlng = mouseEvent.latLng;
-          onMapClick(latlng.getLat(), latlng.getLng());
-        });
-
-        // 드래그 시작 이벤트
-        window.kakao.maps.event.addListener(mapRef.current, 'dragstart', () => {
-          onDragStart();
-        });
-
-        // 확대/축소 및 이동 이벤트 디바운싱
-        const handleBoundsChanged = () => {
-          if (zoomTimeoutRef.current) {
-            clearTimeout(zoomTimeoutRef.current);
-          }
-          zoomTimeoutRef.current = setTimeout(() => {
-            if (mapRef.current) {
-              currentBoundsRef.current = mapRef.current.getBounds();
-            }
-          }, 150);
+        const options = {
+          center: new window.kakao.maps.LatLng(Number(center.lat), Number(center.lng)),
+          level: 3
         };
 
-        window.kakao.maps.event.addListener(mapRef.current, 'zoom_changed', handleBoundsChanged);
-        window.kakao.maps.event.addListener(mapRef.current, 'dragend', handleBoundsChanged);
+        try {
+          mapRef.current = new window.kakao.maps.Map(container, options);
 
-        console.log('✅ 카카오맵 초기화 완료');
-      } catch (error) {
-        console.error('❌ 카카오맵 초기화 실패:', error);
-      }
+          // 지도 클릭 이벤트
+          window.kakao.maps.event.addListener(mapRef.current, 'click', (mouseEvent: any) => {
+            const latlng = mouseEvent.latLng;
+            onMapClick(latlng.getLat(), latlng.getLng());
+          });
+
+          // 드래그 시작 이벤트
+          window.kakao.maps.event.addListener(mapRef.current, 'dragstart', () => {
+            onDragStart();
+          });
+
+          // 확대/축소 및 이동 이벤트 디바운싱
+          const handleBoundsChanged = () => {
+            if (zoomTimeoutRef.current) {
+              clearTimeout(zoomTimeoutRef.current);
+            }
+            zoomTimeoutRef.current = setTimeout(() => {
+              if (mapRef.current) {
+                currentBoundsRef.current = mapRef.current.getBounds();
+              }
+            }, 150);
+          };
+
+          window.kakao.maps.event.addListener(mapRef.current, 'zoom_changed', handleBoundsChanged);
+          window.kakao.maps.event.addListener(mapRef.current, 'dragend', handleBoundsChanged);
+
+          // 초기 바운드 설정
+          currentBoundsRef.current = mapRef.current.getBounds();
+
+          console.log('✅ 카카오맵 초기화 완료');
+        } catch (error) {
+          console.error('❌ 카카오맵 초기화 실패:', error);
+        }
+      });
     };
 
-    // 약간의 지연 후 초기화 시도
-    const timer = setTimeout(initMap, 100);
-    return () => clearTimeout(timer);
-  }, []);
+    initMap();
+
+    return () => {
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+    };
+  }, [center]); // center가 변경되면 지도를 다시 그릴 수도 있으나, 여기서는 초기화에만 집중
 
   // 사용자 위치 마커
   useEffect(() => {
@@ -130,8 +169,13 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       userMarkerRef.current.setMap(null);
     }
 
-    const position = new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng);
-    
+    const validLat = Number(userLocation.lat);
+    const validLng = Number(userLocation.lng);
+
+    if (!isValidCoordinate(validLat, validLng)) return;
+
+    const position = new window.kakao.maps.LatLng(validLat, validLng);
+
     // 커스텀 오버레이로 사용자 위치 표시
     const content = `
       <div style="
@@ -181,7 +225,7 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     }
 
     // 뷰포트 내의 충전소만 필터링
-    const visibleStations = stations.filter(station => 
+    const visibleStations = stations.filter(station =>
       !currentBoundsRef.current || isInViewport(station.lat, station.lng)
     );
 
@@ -195,19 +239,24 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
 
     visibleStations.forEach(station => {
       const key = station.id;
-      
+
       // 이미 존재하는 마커는 건너뛰기
       if (stationMarkersMap.current.has(key)) return;
 
-      const position = new window.kakao.maps.LatLng(station.lat, station.lng);
-      
+      const validLat = Number(station.lat);
+      const validLng = Number(station.lng);
+
+      if (!isValidCoordinate(validLat, validLng)) return;
+
+      const position = new window.kakao.maps.LatLng(validLat, validLng);
+
       // 지하철 충전소와 일반 충전소 구분
       const isSubway = station.type === 'SUBWAY';
       const icon = isSubway ? '🚇' : '⚡';
-      const bgColor = isSubway 
+      const bgColor = isSubway
         ? (station.isAvailable ? '#10b981' : '#6b7280') // 초록색 (지하철)
         : (station.isAvailable ? '#10b981' : '#6b7280'); // 초록색 (일반)
-      
+
       // DOM 요소 생성
       const markerDiv = document.createElement('div');
       markerDiv.style.cssText = `
@@ -229,14 +278,14 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
         ${isSubway ? 'border: 2px solid #059669;' : ''}
       `;
       markerDiv.innerHTML = `${icon} ${station.name}${isSubway && station.lineName ? ` (${station.lineName})` : ''}`;
-      
+
       // 클릭 이벤트 추가 - 더 강력한 방식
       const handleMarkerClick = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
         onStationClick(station);
       };
-      
+
       markerDiv.addEventListener('click', handleMarkerClick);
       markerDiv.addEventListener('mousedown', handleMarkerClick);
       markerDiv.addEventListener('touchstart', handleMarkerClick);
@@ -263,7 +312,7 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     }
 
     // 뷰포트 내의 도로 차단만 필터링
-    const visibleBlocks = roadBlocks.filter(block => 
+    const visibleBlocks = roadBlocks.filter(block =>
       !currentBoundsRef.current || isInViewport(block.lat, block.lng)
     );
 
@@ -277,11 +326,17 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
 
     visibleBlocks.forEach(block => {
       const key = `${block.lat}-${block.lng}`;
-      
+
       // 이미 존재하는 마커는 건너뛰기
       if (roadBlockMarkersMap.current.has(key)) return;
-      const position = new window.kakao.maps.LatLng(block.lat, block.lng);
-      
+
+      const validLat = Number(block.lat);
+      const validLng = Number(block.lng);
+
+      if (!isValidCoordinate(validLat, validLng)) return;
+
+      const position = new window.kakao.maps.LatLng(validLat, validLng);
+
       const severityColors: any = {
         high: '#dc2626',
         medium: '#f97316',
@@ -348,10 +403,11 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
         `;
 
         const infowindow = new window.kakao.maps.InfoWindow({
-          content: infoContent
+          content: infoContent,
+          position: position
         });
 
-        infowindow.open(mapRef.current, marker);
+        infowindow.open(mapRef.current);
       });
 
       const marker = new window.kakao.maps.CustomOverlay({
@@ -381,9 +437,10 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       currentBoundsRef.current = mapRef.current.getBounds();
     }
 
-    // 뷰포트 내의 제보만 필터링
-    const visibleReports = reports.filter(report => 
-      !currentBoundsRef.current || isInViewport(report.lat, report.lng)
+    // 뷰포트 내의 제보만 필터링하고, 허용된 위험 단계만 표시
+    const visibleReports = reports.filter(report =>
+      (!currentBoundsRef.current || isInViewport(report.lat, report.lng)) &&
+      visibleSeverities.has(report.severity)
     );
 
     // 제거된 마커 삭제
@@ -396,11 +453,17 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
 
     visibleReports.forEach(report => {
       const key = report.id;
-      
+
       // 이미 존재하는 마커는 건너뛰기
       if (reportMarkersMap.current.has(key)) return;
-      const position = new window.kakao.maps.LatLng(report.lat, report.lng);
-      
+
+      const validLat = Number(report.lat);
+      const validLng = Number(report.lng);
+
+      if (!isValidCoordinate(validLat, validLng)) return;
+
+      const position = new window.kakao.maps.LatLng(validLat, validLng);
+
       const colors: any = {
         CAUTION: '#eab308',
         WARNING: '#f97316',
@@ -438,11 +501,18 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       marker.setMap(mapRef.current);
       reportMarkersMap.current.set(key, marker);
     });
-  }, [reports, showReports, isInViewport]);
+  }, [reports, showReports, visibleSeverities, isInViewport]);
 
   // 승강기 마커 (sieun 브랜치 기능 추가)
   useEffect(() => {
-    if (!mapRef.current || !elevators || elevators.length === 0) return;
+    if (!mapRef.current) return;
+
+    if (!showElevators || !elevators || elevators.length === 0) {
+      // 모든 마커 제거
+      elevatorMarkersMap.current.forEach(marker => marker.setMap(null));
+      elevatorMarkersMap.current.clear();
+      return;
+    }
 
     // 현재 뷰포트 가져오기
     if (mapRef.current) {
@@ -450,7 +520,7 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     }
 
     // 뷰포트 내의 승강기만 필터링
-    const visibleElevators = elevators.filter(elevator => 
+    const visibleElevators = elevators.filter(elevator =>
       !currentBoundsRef.current || isInViewport(elevator.lat, elevator.lng)
     );
 
@@ -464,54 +534,54 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
 
     visibleElevators.forEach(elevatorInfo => {
       const key = `${elevatorInfo.stationName}-${elevatorInfo.lat}-${elevatorInfo.lng}`;
-      
+
       // 이미 존재하는 마커는 건너뛰기
       if (elevatorMarkersMap.current.has(key)) return;
 
-      const position = new window.kakao.maps.LatLng(elevatorInfo.lat, elevatorInfo.lng);
-      
-      // 엘리베이터와 에스컬레이터 개수 및 상태 계산
+      const validLat = Number(elevatorInfo.lat);
+      const validLng = Number(elevatorInfo.lng);
+
+      if (!isValidCoordinate(validLat, validLng)) return;
+
+      const position = new window.kakao.maps.LatLng(validLat, validLng);
+
+      // 엘리베이터 개수 및 상태 계산 (에스컬레이터 제외)
       const elevators = elevatorInfo.elevators.filter(e => e.type === 'ELEVATOR');
-      const escalators = elevatorInfo.elevators.filter(e => e.type === 'ESCALATOR');
-      
+
       const elevatorCount = elevators.length;
-      const escalatorCount = escalators.length;
-      
-      // 각 타입별 상태 확인
+
+      // 고장난 엘리베이터 확인
       const brokenElevators = elevators.filter(e => e.status === 'BROKEN').length;
-      const brokenEscalators = escalators.filter(e => e.status === 'BROKEN').length;
-      
+
       // 전체 상태 판단 (운행 중 / 고장)
       let bgColor = '#22c55e'; // 기본: 초록색 (운행 중)
       let icon = '🛗';
-      
-      const totalBroken = brokenElevators + brokenEscalators;
-      
-      if (totalBroken > 0) {
+
+      if (brokenElevators > 0) {
         bgColor = '#ef4444'; // 고장 있음: 빨간색
         icon = '❌';
       }
-      
+
       // 간단한 정보 생성
-      const elevatorList = elevatorInfo.elevators.map((elev) => {
-        const typeText = elev.type === 'ELEVATOR' ? '🛗 엘리베이터' : '🔼 에스컬레이터';
+      const elevatorList = elevators.map((elev) => {
+        const typeText = '🛗 엘리베이터'; // 항상 엘리베이터
         const directionText = elev.direction ? ` (${elev.direction})` : '';
         const statusText = elev.status === 'BROKEN' ? '❌ 고장' : '✅ 운행 중';
         const statusColor = elev.status === 'BROKEN' ? '#dc2626' : '#16a34a';
-        
+
         return `<div style="padding: 6px 0; border-bottom: 1px solid #e5e7eb;">
           <strong style="font-size: 13px;">${typeText}${directionText}</strong>
           <span style="margin-left: 8px; color: ${statusColor}; font-weight: bold; font-size: 12px;">${statusText}</span>
         </div>`;
       }).join('');
-      
+
       const infoContent = `
-        <div style="padding: 12px; min-width: 220px;">
-          <h3 style="font-weight: bold; font-size: 15px; margin-bottom: 10px;">🛗 ${elevatorInfo.stationName}역</h3>
-          <div style="margin-bottom: 8px; font-size: 12px; color: #666;">
-            엘리베이터 ${elevatorCount}개 · 에스컬레이터 ${escalatorCount}개
+        <div style="padding: 16px; min-width: 320px;">
+          <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 12px;">🛗 ${elevatorInfo.stationName}역</h3>
+          <div style="margin-bottom: 10px; font-size: 13px; color: #666;">
+            엘리베이터 ${elevatorCount}개
           </div>
-          <div style="margin-top: 8px;">
+          <div style="margin-top: 10px;">
             ${elevatorList}
           </div>
         </div>
@@ -519,7 +589,7 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
 
       // 마커 ID 생성
       const markerId = `elevator-${elevatorInfo.stationName.replace(/\s/g, '-')}-${Date.now()}`;
-      
+
       const content = `
         <div id="${markerId}" style="position: relative; cursor: pointer; width: 32px; height: 32px;">
           <div style="width: 100%; height: 100%; background: ${bgColor}; border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">
@@ -540,7 +610,8 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
       // 인포윈도우 생성
       const infowindow = new window.kakao.maps.InfoWindow({
         content: infoContent,
-        removable: false
+        removable: true,
+        position: position
       });
 
       // DOM 요소에 클릭 이벤트 추가 (setTimeout으로 DOM 로드 대기)
@@ -549,28 +620,31 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
         if (markerElement) {
           markerElement.addEventListener('click', (e) => {
             e.stopPropagation();
-            infowindow.open(mapRef.current, overlay);
+            infowindow.open(mapRef.current);
           });
         }
       }, 100);
     });
-  }, [elevators, isInViewport]);
+  }, [elevators, showElevators, isInViewport]);
 
   // 배터리 범위 원
   useEffect(() => {
-    if (!mapRef.current || !userLocation || !batteryRange) {
-      if (circleRef.current) {
-        circleRef.current.setMap(null);
-        circleRef.current = null;
-      }
-      return;
-    }
+    if (!mapRef.current) return;
 
+    // 기존 원 제거
     if (circleRef.current) {
       circleRef.current.setMap(null);
+      circleRef.current = null;
     }
 
-    const position = new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng);
+    if (!userLocation || !batteryRange) return;
+
+    const validLat = Number(userLocation.lat);
+    const validLng = Number(userLocation.lng);
+
+    if (!isValidCoordinate(validLat, validLng)) return;
+
+    const position = new window.kakao.maps.LatLng(validLat, validLng);
 
     circleRef.current = new window.kakao.maps.Circle({
       center: position,
@@ -603,9 +677,13 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     if (!selectedRoute || !selectedRoute.path || selectedRoute.path.length === 0) return;
 
     // 경로 라인 그리기
-    const linePath = selectedRoute.path.map((point: any) => 
-      new window.kakao.maps.LatLng(point.lat, point.lng)
-    );
+    const linePath = selectedRoute.path
+      .filter((point: any) => isValidCoordinate(Number(point.lat), Number(point.lng)))
+      .map((point: any) =>
+        new window.kakao.maps.LatLng(Number(point.lat), Number(point.lng))
+      );
+
+    if (linePath.length === 0) return;
 
     const colors: any = {
       WALK: '#10b981',
@@ -625,9 +703,12 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
     polylineRef.current.setMap(mapRef.current);
 
     // 목적지 마커
-    if (routeDestination) {
-      const position = new window.kakao.maps.LatLng(routeDestination.lat, routeDestination.lng);
-      
+    const destLat = Number(routeDestination.lat);
+    const destLng = Number(routeDestination.lng);
+
+    if (routeDestination && isValidCoordinate(destLat, destLng)) {
+      const position = new window.kakao.maps.LatLng(destLat, destLng);
+
       const content = `
         <div style="
           background: #ef4444;
@@ -669,8 +750,8 @@ export const KakaoMapComponent: React.FC<MapProps> = ({
   }, [onMapClick, onSaveLocation]);
 
   return (
-    <div 
-      ref={mapContainerRef} 
+    <div
+      ref={mapContainerRef}
       style={{ width: '100%', height: '100%' }}
     />
   );
