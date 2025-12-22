@@ -143,69 +143,79 @@ const App: React.FC = () => {
       setUserLocation(defaultLocation);
       console.log('📍 기본 위치 설정 완료 (대구 중앙로역)');
 
+      // GPS 신호 수신 여부 플래그 (IP 위치가 GPS보다 늦게 와서 덮어쓰는 것 방지)
+      let isGpsSignalReceived = false;
+
+      // 위치 업데이트 및 추가 데이터(경사도) 조회 헬퍼 함수
+      const updateLocationAndSlope = async (lat: number, lng: number, source: 'GPS' | 'IP') => {
+        // 이미 GPS로 정확한 위치를 잡았다면, IP 위치(부정확)는 무시
+        if (source === 'IP' && isGpsSignalReceived) {
+          console.log('🚫 GPS 위치가 이미 있어서 IP 위치 업데이트 생략');
+          return;
+        }
+
+        if (source === 'GPS') {
+          isGpsSignalReceived = true;
+        }
+
+        setUserLocation({ lat, lng });
+
+        try {
+          const slope = await api.getSlopeByLocation(lat, lng);
+          setEnvironment(prev => ({ ...prev, slopeAvg: slope }));
+        } catch (e) {
+          console.error("경사도 데이터 조회 실패:", e);
+        }
+      };
+
+      // 1. IP 기반 위치 조회 (빠른 응답, 대략적 위치) - 즉시 실행
+      fetch('https://ipapi.co/json/')
+        .then(response => response.json())
+        .then(data => {
+          if (data.latitude && data.longitude) {
+            console.log(`✅ IP 기반 위치 조회 성공: ${data.city}, ${data.country} (${data.latitude}, ${data.longitude})`);
+            updateLocationAndSlope(parseFloat(data.latitude), parseFloat(data.longitude), 'IP');
+          }
+        })
+        .catch(ipError => {
+          console.warn('❌ IP 기반 위치 조회 실패:', ipError);
+        });
+
       try {
-        // GPS 위치 조회 시도 (비동기)
+        // 2. GPS 위치 조회 (정확한 위치, 느림) - 병렬 실행
         if (navigator.geolocation) {
           console.log('🛰️ GPS 위치 조회 시도...');
+
+          // GPS 설정 옵션 (정확도 우선)
+          const GEOLOCATION_OPTIONS = {
+            enableHighAccuracy: true, // 고정밀 모드
+            timeout: 20000,           // 20초 대기
+            maximumAge: 0             // 최신 위치 필수
+          };
 
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               const { latitude, longitude } = position.coords;
-              console.log(`✅ GPS 위치 조회 성공: ${latitude}, ${longitude}`);
-              setUserLocation({ lat: latitude, lng: longitude });
-
-              // 경사도 데이터 가져오기
-              try {
-                const slope = await api.getSlopeByLocation(latitude, longitude);
-                setEnvironment(prev => ({ ...prev, slopeAvg: slope }));
-              } catch (e) {
-                console.error("경사도 데이터 조회 실패:", e);
-              }
+              console.log(`✅ GPS 위치 조회 성공 (정밀): ${latitude}, ${longitude}`);
+              await updateLocationAndSlope(latitude, longitude, 'GPS');
             },
             (error) => {
               console.warn('❌ GPS 위치 조회 실패:', error.message);
-
-              // IP 기반 위치 시도
-              fetch('https://ipapi.co/json/')
-                .then(response => response.json())
-                .then(data => {
-                  if (data.latitude && data.longitude) {
-                    const ipLocation = {
-                      lat: parseFloat(data.latitude),
-                      lng: parseFloat(data.longitude)
-                    };
-                    console.log(`✅ IP 기반 위치 조회 성공: ${data.city}, ${data.country}`);
-                    setUserLocation(ipLocation);
-                  }
-                })
-                .catch(ipError => {
-                  console.warn('❌ IP 기반 위치 조회도 실패:', ipError);
-                  console.log('📍 기본 위치 유지');
-                });
+              // IP 위치는 위에서 이미 처리하므로 여기서는 별도 처리 불필요
             },
-            {
-              enableHighAccuracy: false, // 정확도보다 속도 우선
-              timeout: 5000, // 5초 타임아웃
-              maximumAge: 600000 // 10분간 캐시 사용
-            }
+            GEOLOCATION_OPTIONS
           );
 
-          // GPS 위치 감시 시작 (선택적)
+          // GPS 위치 감시 시작
           const watchId = navigator.geolocation.watchPosition(
             async (pos) => {
-              const { latitude: lat, longitude: lng } = pos.coords;
-              setUserLocation({ lat, lng });
-              try {
-                const slope = await api.getSlopeByLocation(lat, lng);
-                setEnvironment(prev => ({ ...prev, slopeAvg: slope }));
-              } catch (e) {
-                console.error("경사도 데이터 조회 실패:", e);
-              }
+              const { latitude, longitude } = pos.coords;
+              await updateLocationAndSlope(latitude, longitude, 'GPS');
             },
             (error) => {
               console.warn("GPS 위치 감시 오류:", error.message);
             },
-            { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+            GEOLOCATION_OPTIONS
           );
 
           return () => navigator.geolocation.clearWatch(watchId);
@@ -382,7 +392,7 @@ const App: React.FC = () => {
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 20000,
           maximumAge: 0 // 캐시 사용 안함
         }
       );
