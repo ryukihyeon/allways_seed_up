@@ -81,24 +81,49 @@ export const api = {
   reverseGeocode: async (lat: number, lng: number): Promise<LocationInfo> => {
     await delay(200);
     
+    let address = '주소 정보 없음';
+    let roadAddress = '도로명 주소 없음';
+    let placeName = '선택된 위치';
+    
     try {
-      const response = await fetch(
+      // 1. 좌표로 주소 가져오기
+      const coordResponse = await fetch(
         `/kakao-api/v2/local/geo/coord2address.json?x=${lng}&y=${lat}`
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.documents && data.documents.length > 0) {
-          const doc = data.documents[0];
-          return {
-            lat,
-            lng,
-            address: doc.address?.address_name || '주소 정보 없음',
-            roadAddress: doc.road_address?.address_name || doc.address?.address_name || '도로명 주소 없음',
-            name: '선택된 위치'
-          };
+      if (coordResponse.ok) {
+        const coordData = await coordResponse.json();
+        if (coordData.documents && coordData.documents.length > 0) {
+          const doc = coordData.documents[0];
+          address = doc.address?.address_name || '주소 정보 없음';
+          roadAddress = doc.road_address?.address_name || doc.address?.address_name || '도로명 주소 없음';
         }
       }
+
+      // 2. 주변 장소 검색으로 장소명 가져오기
+      try {
+        const placeResponse = await fetch(
+          `/kakao-api/v2/local/search/keyword.json?query=${encodeURIComponent(address)}&x=${lng}&y=${lat}&radius=50&sort=distance`
+        );
+
+        if (placeResponse.ok) {
+          const placeData = await placeResponse.json();
+          if (placeData.documents && placeData.documents.length > 0) {
+            // 가장 가까운 장소의 이름 사용
+            placeName = placeData.documents[0].place_name || '선택된 위치';
+          }
+        }
+      } catch (placeError) {
+        console.log('장소명 검색 실패, 기본값 사용:', placeError);
+      }
+
+      return {
+        lat,
+        lng,
+        address,
+        roadAddress,
+        name: placeName
+      };
     } catch (error) {
       console.error('카카오 역지오코딩 실패:', error);
     }

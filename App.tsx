@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapComponent } from './components/MapComponent';
+import { KakaoMapComponent } from './components/KakaoMapComponent';
 import { ControlPanel } from './components/ControlPanel';
 import { StationModal } from './components/StationModal';
 import { BatteryDrawer } from './components/BatteryDrawer';
@@ -10,12 +10,15 @@ import { api } from './services/mockApi';
 import { Station, Report, UserProfile, EnvironmentData, LocationInfo, RouteOption, WeatherData, RoadBlock } from './types';
 import { INITIAL_CENTER, WHEELCHAIR_MODELS } from './constants';
 import { fetchRoadBlockInfo, filterActiveBlocks, filterRoadBlocksByLocation } from './services/roadBlockApi';
+import { fetchDaeguMetroChargers } from './services/daeguMetroApi';
+import { fetchDaeguElevators, type ElevatorInfo } from './services/daeguElevatorApi';
 
 const App: React.FC = () => {
   // --- State ---
   const [stations, setStations] = useState<Station[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [roadBlocks, setRoadBlocks] = useState<RoadBlock[]>([]);
+  const [elevators, setElevators] = useState<ElevatorInfo[]>([]);
   
   // UI Toggles
   const [showStations, setShowStations] = useState(true);
@@ -57,15 +60,20 @@ const App: React.FC = () => {
   // --- Effects ---
   useEffect(() => {
     const initData = async () => {
-      const [stationData, reportData, weatherData, roadBlockData] = await Promise.all([
+      const [stationData, reportData, weatherData, roadBlockData, daeguChargers, daeguElevators] = await Promise.all([
         api.getStations(),
         api.getReports(),
         api.getWeather(),
-        fetchRoadBlockInfo()
+        fetchRoadBlockInfo(),
+        fetchDaeguMetroChargers(),
+        fetchDaeguElevators()
       ]);
-      setStations(stationData);
+      
+      // 대구도시철도 충전소만 사용 (실제 API 데이터)
+      setStations(daeguChargers);
       setReports(reportData);
       setWeather(weatherData);
+      setElevators(daeguElevators);
       
       // 현재 진행 중인 도로 차단만 필터링
       const activeBlocks = filterActiveBlocks(roadBlockData);
@@ -78,7 +86,8 @@ const App: React.FC = () => {
       }));
 
       console.log('📊 데이터 로드 완료:', {
-        충전소: stationData.length,
+        '대구1호선 충전설비': daeguChargers.length,
+        '대구 승강기': daeguElevators.length,
         제보: reportData.length,
         도로차단: activeBlocks.length
       });
@@ -100,36 +109,10 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
+  // 현재 위치를 서울 시청으로 고정
   useEffect(() => {
-    if (!navigator.geolocation) {
-      console.warn("Geolocation is not supported by this browser. Using default location (Seoul City Hall).");
-      // 위치 권한이 없으면 서울 시청으로 설정
-      setUserLocation(INITIAL_CENTER);
-      return;
-    }
-
-    const watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation({ lat: latitude, lng: longitude });
-        try {
-            const slope = await api.getSlopeByLocation(latitude, longitude);
-            setEnvironment(prev => ({ ...prev, slopeAvg: slope }));
-        } catch (e) {
-            console.error("Failed to get slope data", e);
-        }
-      },
-      (error) => {
-        console.warn("Error getting location:", error.message);
-        // 위치 에러 발생 시 서울 시청으로 설정
-        if (!userLocation) {
-          console.log("📍 위치 권한 없음. 기본 위치(서울 시청)로 설정합니다.");
-          setUserLocation(INITIAL_CENTER);
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
+    console.log("📍 현재 위치를 서울 시청으로 고정합니다.");
+    setUserLocation(INITIAL_CENTER);
   }, []);
 
   useEffect(() => {
@@ -300,11 +283,12 @@ const App: React.FC = () => {
   return (
     <div className="relative w-full h-screen bg-gray-50 overflow-hidden font-sans">
       
-      <MapComponent
+      <KakaoMapComponent
         center={INITIAL_CENTER}
         stations={stations}
         reports={reports}
         roadBlocks={roadBlocks}
+        elevators={elevators}
         showStations={showStations}
         showReports={showReports}
         batteryRange={predictedRange}
