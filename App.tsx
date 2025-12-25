@@ -444,6 +444,11 @@ const App: React.FC = () => {
     }
   }, [userLocation]);
 
+  /* 
+   * 제보 제출 핸들러
+   * useCallback 의존성 배열에 newReportCoords를 포함시켜 최신 좌표 값을 참조하도록 수정했습니다. 
+   * (이전에는 빈 배열이라 초기값 null만 참조되었습니다)
+   */
   const handleSubmitReport = useCallback(async (type: string, desc: string, severity: 'CAUTION' | 'WARNING' | 'DANGER', image: string | undefined) => {
     if (!newReportCoords) return;
     const reportType = type as Report['type'];
@@ -456,7 +461,7 @@ const App: React.FC = () => {
       imageUrl: image
     });
     setReports(prev => [...prev, newReport]);
-  }, []);
+  }, [newReportCoords]);
 
   const handleSearch = useCallback(async (query: string) => {
     setIsSearching(true);
